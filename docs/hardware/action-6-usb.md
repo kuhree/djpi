@@ -36,7 +36,7 @@ The desktop auto-mounted `/dev/sdd` at `/run/media/kuhree/OsmoAction` with
 read-write, `noexec`, and `noatime` options. The NixOS station module now uses
 the exact observed DJI USB identity plus filesystem evidence to request a
 read-only, `nosuid,nodev,noexec` mount; this still requires validation on the
-Raspberry Pi deployment.
+chosen NAS host or VM deployment.
 
 No MTP/PTP USB interface, MTP mount, or installed MTP client was observed in
 this mode.

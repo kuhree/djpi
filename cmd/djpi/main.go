@@ -272,15 +272,16 @@ func configuredDestinations(ctx context.Context, configuration config.Config, lo
 				}
 			}
 			archive, err := destination.NewS3Archive(ctx, destination.S3Options{
-				DestinationName: configured.Name,
-				Endpoint:        configured.Endpoint,
-				Region:          configured.Region,
-				Bucket:          configured.Bucket,
-				Prefix:          configured.Prefix,
-				UsePathStyle:    configured.UsePathStyle,
-				AccessKeyID:     accessKey,
-				SecretAccessKey: secretKey,
-				SessionToken:    sessionToken,
+				DestinationName:   configured.Name,
+				Endpoint:          configured.Endpoint,
+				Region:            configured.Region,
+				Bucket:            configured.Bucket,
+				Prefix:            configured.Prefix,
+				UsePathStyle:      configured.UsePathStyle,
+				UploadConcurrency: configured.UploadConcurrency,
+				AccessKeyID:       accessKey,
+				SecretAccessKey:   secretKey,
+				SessionToken:      sessionToken,
 			})
 			if err != nil {
 				return nil, fmt.Errorf("destination %q: %w", configured.Name, err)

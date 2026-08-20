@@ -1,16 +1,16 @@
 # djpi
 
-`djpi` is a Raspberry Pi camera station for the DJI Osmo Action 6 and
-DJI Osmo Pocket 3.
+`djpi` is an x86_64 Linux camera station for the DJI Osmo Action 6 and DJI Osmo
+Pocket 3.
 
 The target experience is simple: connect a camera, ingest every media item,
 verify delivery to the configured destinations, and report when the source is
 ready for a separately proven cleanup operation.
 
-The intended runtime is an always-running service on the Raspberry Pi. Plugging
-in a camera should be the only routine operator action; the CLI commands below
-are diagnostics and development tools for the same detection and inventory
-boundaries used by that service.
+The intended runtime is an always-running service on a NAS, server, or VM.
+Plugging in a camera should be the only routine operator action; the CLI
+commands below are diagnostics and development tools for the same detection and
+inventory boundaries used by that service.
 
 The project will also expose the useful control surfaces already available for
 these cameras: Action 6 BLE control/status through DJI's R SDK, Pocket 3
@@ -134,8 +134,10 @@ Cleanup is not implemented or enabled by any configuration. A completed ingest
 event means the configured deliveries verified; it is not authorization to
 delete or format the camera.
 
-For the headless Raspberry Pi service, read-only automount, secret injection,
-and operator commands, see [`docs/deployment-nixos.md`](docs/deployment-nixos.md).
+For host, VM, and container placement guidance, see
+[`docs/deployment.md`](docs/deployment.md). For NixOS read-only automount,
+secret injection, and operator commands, see
+[`docs/deployment-nixos.md`](docs/deployment-nixos.md).
 The implemented and intentionally absent wireless behavior is recorded in
 [`docs/wireless.md`](docs/wireless.md).
 The corresponding Action 6 control boundary is in

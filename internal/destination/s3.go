@@ -24,15 +24,16 @@ import (
 )
 
 type S3Options struct {
-	DestinationName string
-	Endpoint        string
-	Region          string
-	Bucket          string
-	Prefix          string
-	UsePathStyle    bool
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
+	DestinationName   string
+	Endpoint          string
+	Region            string
+	Bucket            string
+	Prefix            string
+	UsePathStyle      bool
+	UploadConcurrency int
+	AccessKeyID       string
+	SecretAccessKey   string
+	SessionToken      string
 }
 
 type s3HeadClient interface {
@@ -53,6 +54,8 @@ type S3Archive struct {
 	get      s3GetClient
 	uploader s3UploadClient
 }
+
+const defaultS3UploadConcurrency = 4
 
 func NewS3Archive(ctx context.Context, options S3Options) (*S3Archive, error) {
 	if err := validateS3Options(options); err != nil {
@@ -78,7 +81,7 @@ func NewS3Archive(ctx context.Context, options S3Options) (*S3Archive, error) {
 	})
 	uploader := manager.NewUploader(client, func(value *manager.Uploader) {
 		value.PartSize = 16 * 1024 * 1024
-		value.Concurrency = 2
+		value.Concurrency = s3UploadConcurrency(options)
 		value.LeavePartsOnError = false
 	})
 	return &S3Archive{options: options, head: client, get: client, uploader: uploader}, nil
@@ -223,7 +226,17 @@ func validateS3Options(options S3Options) error {
 			return errors.New("S3 endpoint must be an HTTP(S) URL without credentials, query, or fragment")
 		}
 	}
+	if options.UploadConcurrency < 0 || options.UploadConcurrency > 32 {
+		return errors.New("S3 upload concurrency must be between 1 and 32 when set")
+	}
 	return nil
+}
+
+func s3UploadConcurrency(options S3Options) int {
+	if options.UploadConcurrency == 0 {
+		return defaultS3UploadConcurrency
+	}
+	return options.UploadConcurrency
 }
 
 func s3ObjectKey(prefix, location string) string {

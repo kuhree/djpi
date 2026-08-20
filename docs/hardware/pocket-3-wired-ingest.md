@@ -2,7 +2,7 @@
 
 Observed on 2026-08-20 using djpi commit `7e2683f` on the NixOS host
 `nixtop`. This validates the complete userspace ingest path against one real
-Pocket 3 snapshot. It does not validate the Raspberry Pi automount unit or
+Pocket 3 snapshot. It does not validate the target Station's automount unit or
 authorize camera cleanup.
 
 The desktop had already mounted the camera read-write at
@@ -109,7 +109,7 @@ before and after that audit. The validation paths remain on `nixtop`:
 ## Remaining proof
 
 - Repeat through the NixOS module's read-only udev/systemd automount on the
-  actual Raspberry Pi.
+  chosen NAS host or VM.
 - Interrupt a large transfer by physically disconnecting the camera, then prove
   the same staging cleanup and resume behavior.
 - Validate configured S3-compatible and Immich destinations with narrowly

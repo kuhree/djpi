@@ -34,6 +34,6 @@ buildGoModule rec {
     homepage = "https://git.kuhree.com/kuhree.com/djpi";
     license = lib.licenses.mit;
     mainProgram = "djpi";
-    platforms = lib.platforms.linux;
+    platforms = [ "x86_64-linux" ];
   };
 }

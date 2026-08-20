@@ -21,19 +21,20 @@ type Config struct {
 }
 
 type Destination struct {
-	Name            string `json:"name"`
-	Type            string `json:"type"`
-	Path            string `json:"path,omitempty"`
-	Endpoint        string `json:"endpoint,omitempty"`
-	Region          string `json:"region,omitempty"`
-	Bucket          string `json:"bucket,omitempty"`
-	Prefix          string `json:"prefix,omitempty"`
-	UsePathStyle    bool   `json:"use_path_style,omitempty"`
-	AccessKeyEnv    string `json:"access_key_env,omitempty"`
-	SecretKeyEnv    string `json:"secret_key_env,omitempty"`
-	SessionTokenEnv string `json:"session_token_env,omitempty"`
-	ServerURL       string `json:"server_url,omitempty"`
-	APIKeyEnv       string `json:"api_key_env,omitempty"`
+	Name              string `json:"name"`
+	Type              string `json:"type"`
+	Path              string `json:"path,omitempty"`
+	Endpoint          string `json:"endpoint,omitempty"`
+	Region            string `json:"region,omitempty"`
+	Bucket            string `json:"bucket,omitempty"`
+	Prefix            string `json:"prefix,omitempty"`
+	UsePathStyle      bool   `json:"use_path_style,omitempty"`
+	UploadConcurrency int    `json:"upload_concurrency,omitempty"`
+	AccessKeyEnv      string `json:"access_key_env,omitempty"`
+	SecretKeyEnv      string `json:"secret_key_env,omitempty"`
+	SessionTokenEnv   string `json:"session_token_env,omitempty"`
+	ServerURL         string `json:"server_url,omitempty"`
+	APIKeyEnv         string `json:"api_key_env,omitempty"`
 }
 
 func Load(path string) (Config, error) {
@@ -79,7 +80,7 @@ func (c Config) Validate() error {
 			if destination.Path == "" {
 				return fmt.Errorf("local destination %q requires path", destination.Name)
 			}
-			if destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" || destination.ServerURL != "" || destination.APIKeyEnv != "" {
+			if destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.UploadConcurrency != 0 || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" || destination.ServerURL != "" || destination.APIKeyEnv != "" {
 				return fmt.Errorf("local destination %q contains settings for another destination type", destination.Name)
 			}
 		case "s3":
@@ -89,6 +90,9 @@ func (c Config) Validate() error {
 			}
 			if destination.Region == "" || destination.Bucket == "" {
 				return fmt.Errorf("S3 destination %q requires region and bucket", destination.Name)
+			}
+			if destination.UploadConcurrency < 0 || destination.UploadConcurrency > 32 {
+				return fmt.Errorf("S3 destination %q upload_concurrency must be between 1 and 32 when set", destination.Name)
 			}
 			if (destination.AccessKeyEnv == "") != (destination.SecretKeyEnv == "") {
 				return fmt.Errorf("S3 destination %q must configure both access_key_env and secret_key_env", destination.Name)
@@ -101,7 +105,7 @@ func (c Config) Validate() error {
 			}
 		case "immich":
 			hasImmich = true
-			if destination.Path != "" || destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" {
+			if destination.Path != "" || destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.UploadConcurrency != 0 || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" {
 				return fmt.Errorf("Immich destination %q contains settings for another destination type", destination.Name)
 			}
 			if destination.ServerURL == "" || destination.APIKeyEnv == "" {

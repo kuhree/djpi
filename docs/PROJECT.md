@@ -2,10 +2,10 @@
 
 ## Product promise
 
-Connect an Action 6 or Pocket 3 to a Raspberry Pi and walk away. djpi discovers
-the media, delivers it to the chosen services, makes progress and failures
-visible, and clears the camera only after it can prove the configured copies
-are intact.
+Connect an Action 6 or Pocket 3 to an x86_64 Linux Station and walk away. djpi
+discovers the media, delivers it to the chosen services, makes progress and
+failures visible, and clears the camera only after it can prove the configured
+copies are intact.
 
 This is intentionally a project for these two cameras. Shared code is welcome,
 but a generic camera-plugin framework is not an MVP goal.
@@ -42,11 +42,12 @@ but a generic camera-plugin framework is not an MVP goal.
 
 ## Runtime model
 
-djpi is primarily an always-running Raspberry Pi station service. Its steady
-state is idle observation; connecting a camera starts detection, Source
-inventory, Delivery, and verification without requiring an operator command.
-The `probe` and `inventory` commands are diagnostic surfaces for hardware
-characterization and service troubleshooting, not the routine product flow.
+djpi is primarily an always-running x86_64 Linux Station service on a NAS,
+server, or VM. Its steady state is idle observation; connecting a camera starts
+detection, Source inventory, Delivery, and verification without requiring an
+operator command. The `probe` and `inventory` commands are diagnostic surfaces
+for hardware characterization and service troubleshooting, not the routine
+product flow.
 
 The service must fail closed on unknown or ambiguous hardware and remain
 non-destructive unless the cleanup safety gate and the independently proven
@@ -74,7 +75,8 @@ machine.
   interface.
 - Measure read behavior while the camera is charging and screen-locked.
 - Prove what cleanup operations are available over wired and wireless paths.
-- Exercise the NixOS read-only automount and full ingest on the Raspberry Pi.
+- Exercise the NixOS read-only automount and full ingest on the target x86_64
+  Station.
 
 Observed hardware notes are kept under [`docs/hardware`](hardware/), including
 the USB mass-storage presentations for the [Action 6](hardware/action-6-usb.md)
@@ -94,7 +96,7 @@ and [Pocket 3](hardware/pocket-3-usb.md), plus the Pocket 3
 The complete local archive path and unchanged-snapshot reconnect idempotence
 are hardware-verified on `nixtop` with a Pocket 3. Abrupt process termination,
 stale staging reclamation, and verified resume are also hardware-verified.
-Raspberry Pi read-only automount and a physical mid-transfer disconnect remain
+Target-host read-only automount and a physical mid-transfer disconnect remain
 to be exercised on hardware.
 
 ### Phase 2: destinations and controlled cleanup
@@ -107,7 +109,7 @@ to be exercised on hardware.
 
 ### Phase 3: wireless ingest
 
-- Port the required Osmosis BLE/Wi-Fi/DUML/HTTP behavior to the Pi service.
+- Port the required Osmosis BLE/Wi-Fi/DUML/HTTP behavior to the Station service.
   The CRC-validated DUML codec and hardware-fixture-backed manifest decoder are
   implemented offline; live BLE, Wi-Fi, UDP, and HTTP orchestration remain.
 - Preserve the same journal and cleanup invariants as wired ingest.

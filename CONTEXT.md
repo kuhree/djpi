@@ -5,6 +5,11 @@ mistaking a successful copy for permission to destroy the source.
 
 ## Language
 
+**Station**:
+The always-running environment that observes Camera connections and coordinates
+Ingest. It may be a physical host or an isolated guest.
+_Avoid_: Raspberry Pi, appliance, worker
+
 **Camera**:
 An enrolled DJI Osmo Action 6 or DJI Osmo Pocket 3 that can provide media or
 camera-control capabilities.
@@ -47,4 +52,3 @@ _Avoid_: Delete, format
 The state in which the cleanup policy is satisfied; it is not evidence that a
 particular cleanup mechanism is supported by the Camera.
 _Avoid_: Done, uploaded, safe
-

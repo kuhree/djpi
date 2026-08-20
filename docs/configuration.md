@@ -87,6 +87,7 @@ reclamation boundary.
       "bucket": "camera-media",
       "prefix": "djpi",
       "use_path_style": true,
+      "upload_concurrency": 4,
       "access_key_env": "DJPI_S3_ACCESS_KEY",
       "secret_key_env": "DJPI_S3_SECRET_KEY"
     }
@@ -107,8 +108,9 @@ checks that metadata and object length using `HeadObject`, then streams the
 stored object back through SHA-256 with `GetObject`. The read-back is deliberate:
 metadata and transport checksums alone do not independently prove that the
 remote bytes equal the inventoried source. Multipart uploads use 16 MiB parts,
-two workers, and abort incomplete multipart state on failure to keep Raspberry
-Pi memory and remote garbage bounded.
+four workers by default, and abort incomplete multipart state on failure.
+`upload_concurrency` may be set from 1 through 32 per S3 Destination to match
+Station CPU, memory, disk, and network capacity.
 
 Multiple destinations may be listed. Every item must verify at every listed
 destination before the station emits `ingest_complete`. Failures remain in the

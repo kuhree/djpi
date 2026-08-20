@@ -1,13 +1,13 @@
-# NixOS Raspberry Pi deployment
+# NixOS x86_64 deployment
 
-The repository is a standalone flake with `x86_64-linux` and `aarch64-linux`
-packages and a `nixosModules.default` module. The module supplies the `djpi`
-binary, strict JSON configuration, an unprivileged hardened systemd service,
-and optional read-only camera automounting.
+The repository is a standalone `x86_64-linux` flake with a
+`nixosModules.default` module. The module supplies the `djpi` binary, strict
+JSON configuration, an unprivileged hardened systemd service, and optional
+read-only camera automounting.
 
 ## Import
 
-Add djpi as a flake input and import its module in the Raspberry Pi system. A
+Add djpi as a flake input and import its module in the x86_64 NAS host or VM. A
 local path is appropriate while this repository has no remote; a later Git
 input can replace it without changing the module configuration.
 
@@ -46,6 +46,7 @@ input can replace it without changing the module configuration.
           bucket = "camera-media";
           prefix = "djpi";
           use_path_style = true;
+          upload_concurrency = 4;
           access_key_env = "DJPI_S3_ACCESS_KEY";
           secret_key_env = "DJPI_S3_SECRET_KEY";
         }
@@ -84,14 +85,15 @@ USB drives. It mounts under `/run/djpi/media` with
 `ro,nosuid,nodev,noexec,noatime`; djpi itself runs without mount capabilities.
 
 This automount path has been evaluated as a NixOS module and its Pocket 3 udev
-properties were matched on `nixtop`. The actual read-only mount and ingest must
-still be exercised on the Raspberry Pi before calling deployment complete.
-Set `autoMount = false` if another trusted component provides mounts.
+properties were matched on the x86_64 host `nixtop`. The actual read-only mount
+and ingest must still be exercised on the chosen NAS host or VM before calling
+that deployment complete. Set `autoMount = false` if another trusted component
+provides mounts.
 
 Separately, the [full Pocket 3 local ingest and idempotent second
 pass](hardware/pocket-3-wired-ingest.md) succeeded on `nixtop` through its
 existing desktop-managed read-write mount. djpi only read that source; this is
-not a substitute for proving the module's read-only mount on the Pi.
+not a substitute for proving the module's read-only mount on the target Station.
 
 ## Operations
 

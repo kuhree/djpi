@@ -162,6 +162,21 @@ func TestS3OptionsRejectCredentialBearingEndpoint(t *testing.T) {
 	}
 }
 
+func TestS3UploadConcurrencyDefaultsAndBounds(t *testing.T) {
+	options := S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}
+	if got := s3UploadConcurrency(options); got != 4 {
+		t.Fatalf("default concurrency = %d", got)
+	}
+	options.UploadConcurrency = 12
+	if got := s3UploadConcurrency(options); got != 12 {
+		t.Fatalf("configured concurrency = %d", got)
+	}
+	options.UploadConcurrency = 33
+	if err := validateS3Options(options); err == nil {
+		t.Fatal("expected excessive concurrency refusal")
+	}
+}
+
 func fixtureUnsafeItem(path string) source.ObservedItem {
 	return source.ObservedItem{Path: path, SizeBytes: 1}
 }
