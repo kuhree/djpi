@@ -35,6 +35,8 @@ go test ./...
 go run ./cmd/djpi version
 go run ./cmd/djpi probe
 go run ./cmd/djpi probe --json
+go run ./cmd/djpi inventory --source /path/to/existing/source
+go run ./cmd/djpi inventory --source /path/to/existing/source --json
 ```
 
 `djpi probe` performs a read-only inventory of Linux USB descriptors, block
@@ -42,3 +44,10 @@ devices, mounted filesystems, and MTP-related evidence. It does not mount,
 copy, delete, or format anything. The JSON form is intended for recording one
 camera at a time during hardware characterization; djpi does not guess camera
 identity from unverified USB IDs.
+
+`djpi inventory` walks an already-mounted Source without opening file contents
+and records every regular file's relative path, size, and modification time.
+Its metadata evidence ID can detect changes between observations, but it is not
+a content digest, Delivery verification, or permission to perform Cleanup. The
+command does not mount a Source and reports an incomplete inventory if it finds
+an unreadable or unsupported entry such as a symlink.
