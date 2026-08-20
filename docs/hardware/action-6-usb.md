@@ -33,9 +33,10 @@ The same USB serial associated the camera with two removable block nodes:
 | `/dev/sde` | 0 bytes | none | none | Second File-Stor Gadget LUN; no media |
 
 The desktop auto-mounted `/dev/sdd` at `/run/media/kuhree/OsmoAction` with
-read-write, `noexec`, and `noatime` options. A Raspberry Pi station should not
-depend on desktop automount behavior; mount policy remains a later design and
-safety decision.
+read-write, `noexec`, and `noatime` options. The NixOS station module now uses
+the exact observed DJI USB identity plus filesystem evidence to request a
+read-only, `nosuid,nodev,noexec` mount; this still requires validation on the
+Raspberry Pi deployment.
 
 No MTP/PTP USB interface, MTP mount, or installed MTP client was observed in
 this mode.
@@ -77,6 +78,5 @@ does not justify deleting any of them.
   path stability.
 - Record the camera firmware version and behavior while charging or locked.
 - Characterize other Action 6 USB modes separately, including UVC.
-- Repeat the same read-only probe for the Pocket 3.
 - Prove any cleanup operation independently on expendable media only after the
   repository safety gate passes.

@@ -36,7 +36,8 @@ but a generic camera-plugin framework is not an MVP goal.
   idempotent object naming.
 - **Immich destination**: upload through Immich's supported API without making
   Immich's catalog state the only preserved copy.
-- **Operator surface**: CLI first, then a small local web UI and notifications.
+- **Operator surface**: structured service events plus human and JSON status
+  commands; a small local web UI and notifications remain later work.
 
 ## Runtime model
 
@@ -50,10 +51,12 @@ The service must fail closed on unknown or ambiguous hardware and remain
 non-destructive unless the cleanup safety gate and the independently proven
 camera-specific cleanup mechanism both permit an operation.
 
-The initial `djpi serve` loop polls the Linux evidence boundary and emits
-structured events for Source detection, completed inventory, removal, and
-blocked states. Polling is an implementation baseline; a later udev-triggered
-wake-up may reduce idle work without changing the state machine.
+The `djpi serve` loop polls the Linux evidence boundary and emits structured
+events for Source detection, completed inventory, removal, and blocked states.
+The NixOS module uses hardware-specific udev events to request a safe read-only
+mount, after which the same polling state machine detects the Source. A later
+event-driven wake-up may reduce idle polling without changing that state
+machine.
 
 ## Delivery phases
 
@@ -64,6 +67,7 @@ wake-up may reduce idle work without changing the state machine.
   interface.
 - Measure read behavior while the camera is charging and screen-locked.
 - Prove what cleanup operations are available over wired and wireless paths.
+- Exercise the NixOS read-only automount and full ingest on the Raspberry Pi.
 
 Observed hardware notes are kept under [`docs/hardware`](hardware/), including
 the USB mass-storage presentations for the [Action 6](hardware/action-6-usb.md)

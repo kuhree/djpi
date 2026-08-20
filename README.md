@@ -49,6 +49,8 @@ go run ./cmd/djpi inventory --source /path/to/existing/source --json
 go run ./cmd/djpi serve
 go run ./cmd/djpi serve --once
 go run ./cmd/djpi serve --config djpi.example.json
+go run ./cmd/djpi status --config djpi.example.json
+go run ./cmd/djpi status --config djpi.example.json --json
 ```
 
 `djpi probe` performs a read-only inventory of Linux USB descriptors, block
@@ -87,3 +89,6 @@ events or journal keys.
 Cleanup is not implemented or enabled by any configuration. A completed ingest
 event means the configured deliveries verified; it is not authorization to
 delete or format the camera.
+
+For the headless Raspberry Pi service, read-only automount, secret injection,
+and operator commands, see [`docs/deployment-nixos.md`](docs/deployment-nixos.md).

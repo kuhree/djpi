@@ -41,6 +41,13 @@ identity.
 
 No MTP/PTP presentation was observed in this mode.
 
+On the filesystem-bearing block node, udev reported `ID_BUS=usb`,
+`ID_VENDOR_ID=2ca3`, `ID_MODEL_ID=0020`, `ID_FS_USAGE=filesystem`, and
+`ID_FS_TYPE=exfat`. The zero-size LUN had the same USB IDs but no filesystem
+usage or type. These hardware-observed properties are the complete match used
+by the NixOS read-only automount rule; it does not match arbitrary removable
+storage.
+
 ## Source layout
 
 ```text

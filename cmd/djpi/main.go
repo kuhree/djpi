@@ -17,9 +17,10 @@ import (
 	"git.kuhree.com/kuhree.com/djpi/internal/probe"
 	sourceinventory "git.kuhree.com/kuhree.com/djpi/internal/source"
 	"git.kuhree.com/kuhree.com/djpi/internal/station"
+	stationstatus "git.kuhree.com/kuhree.com/djpi/internal/status"
 )
 
-const version = "0.0.0-dev"
+var version = "0.0.0-dev"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -39,10 +40,46 @@ func run(args []string) int {
 	if len(args) >= 1 && args[0] == "serve" {
 		return runServe(args[1:])
 	}
+	if len(args) >= 1 && args[0] == "status" {
+		return runStatus(args[1:])
+	}
 
 	fmt.Fprintln(os.Stderr, "djpi is not configured yet")
-	fmt.Fprintln(os.Stderr, "usage: djpi <version|probe|inventory|serve>")
+	fmt.Fprintln(os.Stderr, "usage: djpi <version|probe|inventory|serve|status>")
 	return 2
+}
+
+func runStatus(args []string) int {
+	flags := flag.NewFlagSet("status", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	configPath := flags.String("config", "", "JSON station configuration")
+	jsonOutput := flags.Bool("json", false, "write machine-readable JSON")
+	flags.Usage = func() { fmt.Fprintln(os.Stderr, "usage: djpi status --config PATH [--json]") }
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *configPath == "" {
+		flags.Usage()
+		return 2
+	}
+	configuration, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
+		return 1
+	}
+	state, err := journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")).Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load journal: %v\n", err)
+		return 1
+	}
+	deviceReport := probe.NewSystemCollector().Collect()
+	destinationNames := make([]string, 0, len(configuration.Destinations))
+	for _, configured := range configuration.Destinations {
+		destinationNames = append(destinationNames, configured.Name)
+	}
+	report := stationstatus.Build(time.Now(), deviceReport.SourceCandidates, state, destinationNames, deviceReport.Warnings)
+	if err := stationstatus.Write(os.Stdout, report, *jsonOutput); err != nil {
+		fmt.Fprintf(os.Stderr, "write status: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runServe(args []string) int {
