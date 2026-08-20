@@ -74,6 +74,9 @@ files must remain represented in a complete inventory even when later policy
 distinguishes primary media for Delivery. This observation provides no cleanup
 authority.
 
+The same snapshot was subsequently exercised through the complete local archive
+pipeline; see the [full wired ingest evidence](pocket-3-wired-ingest.md).
+
 ## Remaining characterization
 
 - Repeat after reconnecting and after recording new photo and video modes.

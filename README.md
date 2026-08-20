@@ -30,6 +30,10 @@ official status subscription, while intentionally providing no BLE transport.
 The daemon also serves an optional read-only status page and health endpoints.
 djpi never deletes or formats camera storage.
 
+The Pocket 3 local archive path is [hardware-verified end to
+end](docs/hardware/pocket-3-wired-ingest.md): 9 files totaling 8.57 GB were
+copied and independently verified, and an unchanged second pass skipped all 9.
+
 ## First vertical slice
 
 1. Detect an Action 6 or Pocket 3 connected over USB.

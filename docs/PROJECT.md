@@ -78,7 +78,8 @@ machine.
 
 Observed hardware notes are kept under [`docs/hardware`](hardware/), including
 the USB mass-storage presentations for the [Action 6](hardware/action-6-usb.md)
-and [Pocket 3](hardware/pocket-3-usb.md).
+and [Pocket 3](hardware/pocket-3-usb.md), plus the Pocket 3
+[full verified wired ingest](hardware/pocket-3-wired-ingest.md).
 
 ### Phase 1: wired, non-destructive ingest
 
@@ -89,6 +90,10 @@ and [Pocket 3](hardware/pocket-3-usb.md).
 - Resume safely after disconnect, destination outage, or process restart.
 - Verify content and report ingest completion without treating that report as
   Cleanup authorization or changing the source.
+
+The complete local archive path and unchanged-snapshot reconnect idempotence
+are hardware-verified on `nixtop` with a Pocket 3. Raspberry Pi read-only
+automount and interrupted-transfer recovery remain to be exercised on hardware.
 
 ### Phase 2: destinations and controlled cleanup
 

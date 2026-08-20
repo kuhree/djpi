@@ -87,6 +87,11 @@ properties were matched on `nixtop`. The actual read-only mount and ingest must
 still be exercised on the Raspberry Pi before calling deployment complete.
 Set `autoMount = false` if another trusted component provides mounts.
 
+Separately, the [full Pocket 3 local ingest and idempotent second
+pass](hardware/pocket-3-wired-ingest.md) succeeded on `nixtop` through its
+existing desktop-managed read-write mount. djpi only read that source; this is
+not a substitute for proving the module's read-only mount on the Pi.
+
 ## Operations
 
 ```console
