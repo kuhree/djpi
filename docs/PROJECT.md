@@ -48,6 +48,9 @@ but a generic camera-plugin framework is not an MVP goal.
 - Measure read behavior while the camera is charging and screen-locked.
 - Prove what cleanup operations are available over wired and wireless paths.
 
+Observed hardware notes are kept under [`docs/hardware`](hardware/), beginning
+with the [Action 6 USB mass-storage presentation](hardware/action-6-usb.md).
+
 ### Phase 1: wired, read-only ingest
 
 - React to USB or SD-reader attachment.
@@ -85,4 +88,3 @@ but a generic camera-plugin framework is not an MVP goal.
 - [node-osmo](https://github.com/datagutt/node-osmo)
 - [lib-osmo-ble](https://github.com/yigitkonur/lib-osmo-ble)
 - [djictl](https://github.com/xaionaro-go/djictl)
-
