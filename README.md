@@ -25,6 +25,8 @@ S3-compatible archives, with optional verified Immich catalog delivery. It
 records full SHA-256 evidence and verifies every destination before reporting
 completion. An offline, fixture-backed wireless protocol foundation can decode
 captured media manifests for both cameras, but does not yet connect to a camera.
+An offline Action 6 R SDK codec validates status frames and constructs the
+official status subscription, while intentionally providing no BLE transport.
 The daemon also serves an optional read-only status page and health endpoints.
 djpi never deletes or formats camera storage.
 
@@ -107,3 +109,5 @@ For the headless Raspberry Pi service, read-only automount, secret injection,
 and operator commands, see [`docs/deployment-nixos.md`](docs/deployment-nixos.md).
 The implemented and intentionally absent wireless behavior is recorded in
 [`docs/wireless.md`](docs/wireless.md).
+The corresponding Action 6 control boundary is in
+[`docs/action6-control.md`](docs/action6-control.md).

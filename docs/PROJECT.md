@@ -109,6 +109,8 @@ and upstream revision.
 ### Phase 4: use-the-camera features
 
 - Action 6 status, record, modes, sleep/wake, and optional GPS through R SDK.
+  Offline CRC-validated framing and status decoding are implemented; live BLE
+  transport and every mutating control remain hardware-gated.
 - Pocket 3 gimbal and camera-control experiments.
 - UVC capture, previews, RTMP, thumbnails, and event-driven automation.
 
