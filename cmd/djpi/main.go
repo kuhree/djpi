@@ -81,9 +81,10 @@ func runServe(args []string) int {
 		if *pollInterval == 0 {
 			interval = configuredInterval
 		}
-		destinations := make([]destination.Destination, 0, len(configuration.Destinations))
-		for _, configured := range configuration.Destinations {
-			destinations = append(destinations, destination.LocalArchive{DestinationName: configured.Name, Root: configured.Path})
+		destinations, err := configuredDestinations(context.Background(), configuration, os.LookupEnv)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "configure destinations: %v\n", err)
+			return 1
 		}
 		engine := &ingest.Engine{Journal: journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")), Destinations: destinations}
 		service.WithIngester(engine)
@@ -102,6 +103,53 @@ func runServe(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func configuredDestinations(ctx context.Context, configuration config.Config, lookupEnv func(string) (string, bool)) ([]destination.Destination, error) {
+	result := make([]destination.Destination, 0, len(configuration.Destinations))
+	for _, configured := range configuration.Destinations {
+		switch configured.Type {
+		case "local":
+			result = append(result, destination.LocalArchive{DestinationName: configured.Name, Root: configured.Path})
+		case "s3":
+			accessKey, secretKey, sessionToken := "", "", ""
+			if configured.AccessKeyEnv != "" {
+				var ok bool
+				accessKey, ok = lookupEnv(configured.AccessKeyEnv)
+				if !ok || accessKey == "" {
+					return nil, fmt.Errorf("destination %q requires non-empty environment variable %s", configured.Name, configured.AccessKeyEnv)
+				}
+				secretKey, ok = lookupEnv(configured.SecretKeyEnv)
+				if !ok || secretKey == "" {
+					return nil, fmt.Errorf("destination %q requires non-empty environment variable %s", configured.Name, configured.SecretKeyEnv)
+				}
+				if configured.SessionTokenEnv != "" {
+					sessionToken, ok = lookupEnv(configured.SessionTokenEnv)
+					if !ok || sessionToken == "" {
+						return nil, fmt.Errorf("destination %q requires non-empty environment variable %s", configured.Name, configured.SessionTokenEnv)
+					}
+				}
+			}
+			archive, err := destination.NewS3Archive(ctx, destination.S3Options{
+				DestinationName: configured.Name,
+				Endpoint:        configured.Endpoint,
+				Region:          configured.Region,
+				Bucket:          configured.Bucket,
+				Prefix:          configured.Prefix,
+				UsePathStyle:    configured.UsePathStyle,
+				AccessKeyID:     accessKey,
+				SecretAccessKey: secretKey,
+				SessionToken:    sessionToken,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("destination %q: %w", configured.Name, err)
+			}
+			result = append(result, archive)
+		default:
+			return nil, fmt.Errorf("destination %q has unsupported type %q", configured.Name, configured.Type)
+		}
+	}
+	return result, nil
 }
 
 func runInventory(args []string) int {

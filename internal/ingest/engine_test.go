@@ -66,15 +66,17 @@ func TestEngineRefusesSameMetadataWithChangedContent(t *testing.T) {
 func TestEngineRecordsDestinationConflict(t *testing.T) {
 	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
 	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "photo"})
-	conflict := filepath.Join(archiveRoot, "DCIM", "one.JPG")
-	if err := os.MkdirAll(filepath.Dir(conflict), 0o700); err != nil {
+	archive := destination.LocalArchive{DestinationName: "archive", Root: archiveRoot}
+	evidence, err := archive.Deliver(context.Background(), sourceRoot, "camera", observation.Items[0])
+	if err != nil {
 		t.Fatal(err)
 	}
+	conflict := filepath.Join(archiveRoot, filepath.FromSlash(evidence.Location))
 	if err := os.WriteFile(conflict, []byte("wrong"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	store := journal.NewStore(filepath.Join(t.TempDir(), "journal.json"))
-	engine := Engine{Journal: store, Destinations: []destination.Destination{destination.LocalArchive{DestinationName: "archive", Root: archiveRoot}}}
+	engine := Engine{Journal: store, Destinations: []destination.Destination{archive}}
 	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
 	if err == nil || result.Failed != 1 {
 		t.Fatalf("expected conflict failure, got %#v, %v", result, err)

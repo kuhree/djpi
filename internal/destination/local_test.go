@@ -14,22 +14,22 @@ func TestLocalArchiveDeliversVerifiesAndReusesMatchingFile(t *testing.T) {
 	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
 	item := fixtureItem(t, sourceRoot, "DCIM/DJI_001/clip.MP4", []byte("camera bytes"))
 	archive := LocalArchive{DestinationName: "archive", Root: archiveRoot}
-	evidence, err := archive.Deliver(context.Background(), sourceRoot, item)
+	evidence, err := archive.Deliver(context.Background(), sourceRoot, "camera-one", item)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if evidence.SizeBytes != item.SizeBytes || evidence.ContentDigest == "" {
 		t.Fatalf("missing evidence: %#v", evidence)
 	}
-	verified, err := archive.Verify(context.Background(), item, evidence)
+	verified, err := archive.Verify(context.Background(), evidence)
 	if err != nil || !verified {
 		t.Fatalf("verify = %t, %v", verified, err)
 	}
-	second, err := archive.Deliver(context.Background(), sourceRoot, item)
+	second, err := archive.Deliver(context.Background(), sourceRoot, "camera-one", item)
 	if err != nil || second != evidence {
 		t.Fatalf("idempotent delivery = %#v, %v", second, err)
 	}
-	content, err := os.ReadFile(filepath.Join(archiveRoot, filepath.FromSlash(item.Path)))
+	content, err := os.ReadFile(filepath.Join(archiveRoot, filepath.FromSlash(evidence.Location)))
 	if err != nil || string(content) != "camera bytes" {
 		t.Fatalf("destination content = %q, %v", content, err)
 	}
@@ -38,28 +38,32 @@ func TestLocalArchiveDeliversVerifiesAndReusesMatchingFile(t *testing.T) {
 func TestLocalArchiveRefusesConflictAndChangedSource(t *testing.T) {
 	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
 	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("source"))
-	conflictPath := filepath.Join(archiveRoot, "DCIM", "photo.JPG")
+	archive := LocalArchive{DestinationName: "archive", Root: archiveRoot}
+	firstEvidence, err := archive.Deliver(context.Background(), sourceRoot, "camera", item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflictPath := filepath.Join(archiveRoot, filepath.FromSlash(firstEvidence.Location))
 	if err := os.MkdirAll(filepath.Dir(conflictPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(conflictPath, []byte("other!"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	archive := LocalArchive{DestinationName: "archive", Root: archiveRoot}
-	if _, err := archive.Deliver(context.Background(), sourceRoot, item); err == nil {
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil {
 		t.Fatal("expected destination conflict")
 	}
 	if err := os.WriteFile(filepath.Join(sourceRoot, filepath.FromSlash(item.Path)), []byte("changed size"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := archive.Deliver(context.Background(), sourceRoot, item); err == nil {
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil {
 		t.Fatal("expected changed source refusal")
 	}
 }
 
 func TestLocalArchiveRejectsEscapingPath(t *testing.T) {
 	archive := LocalArchive{DestinationName: "archive", Root: t.TempDir()}
-	if _, err := archive.Deliver(context.Background(), t.TempDir(), source.ObservedItem{Path: "../escape", SizeBytes: 1}); err == nil {
+	if _, err := archive.Deliver(context.Background(), t.TempDir(), "camera", source.ObservedItem{Path: "../escape", SizeBytes: 1}); err == nil {
 		t.Fatal("expected unsafe path refusal")
 	}
 }
@@ -68,7 +72,7 @@ func TestLocalArchiveRefusesDestinationInsideSource(t *testing.T) {
 	sourceRoot := t.TempDir()
 	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
 	archive := LocalArchive{DestinationName: "bad", Root: filepath.Join(sourceRoot, "archive")}
-	if _, err := archive.Deliver(context.Background(), sourceRoot, item); err == nil {
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil {
 		t.Fatal("expected camera-contained destination refusal")
 	}
 	if _, err := os.Stat(filepath.Join(sourceRoot, "archive")); !os.IsNotExist(err) {

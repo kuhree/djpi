@@ -1,0 +1,123 @@
+package destination
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
+
+	"git.kuhree.com/kuhree.com/djpi/internal/source"
+)
+
+type fakeS3Object struct {
+	body     []byte
+	metadata map[string]string
+}
+
+type fakeS3Store struct {
+	objects map[string]fakeS3Object
+	uploads int
+}
+
+func newFakeS3Store() *fakeS3Store {
+	return &fakeS3Store{objects: make(map[string]fakeS3Object)}
+}
+
+func (f *fakeS3Store) HeadObject(_ context.Context, input *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	object, ok := f.objects[aws.ToString(input.Key)]
+	if !ok {
+		return nil, fakeS3NotFound{}
+	}
+	return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(object.body))), Metadata: object.metadata}, nil
+}
+
+func (f *fakeS3Store) Upload(_ context.Context, input *s3.PutObjectInput, _ ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
+	body, err := io.ReadAll(input.Body)
+	if err != nil {
+		return nil, err
+	}
+	metadata := make(map[string]string, len(input.Metadata))
+	for key, value := range input.Metadata {
+		metadata[key] = value
+	}
+	f.objects[aws.ToString(input.Key)] = fakeS3Object{body: body, metadata: metadata}
+	f.uploads++
+	return &manager.UploadOutput{}, nil
+}
+
+type fakeS3NotFound struct{}
+
+func (fakeS3NotFound) Error() string                 { return "not found" }
+func (fakeS3NotFound) ErrorCode() string             { return "NotFound" }
+func (fakeS3NotFound) ErrorMessage() string          { return "not found" }
+func (fakeS3NotFound) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
+
+func TestS3ArchiveDeliversVerifiesAndReusesContentAddressedObject(t *testing.T) {
+	sourceRoot := t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/DJI_001/clip.MP4", []byte("camera bytes"))
+	store := newFakeS3Store()
+	archive := &S3Archive{
+		options:  S3Options{DestinationName: "backup", Region: "us-east-1", Bucket: "media", Prefix: "/djpi/"},
+		head:     store,
+		uploader: store,
+	}
+	evidence, err := archive.Deliver(context.Background(), sourceRoot, "camera-one", item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantedKey := "djpi/camera-one/sha256/7439bb1f96adccaa2164fccdcd6750e34ac61ba27ccec9a478ffa868b9c347cb/DCIM/DJI_001/clip.MP4"
+	if evidence.Location != wantedKey || evidence.ContentDigest != "sha256:7439bb1f96adccaa2164fccdcd6750e34ac61ba27ccec9a478ffa868b9c347cb" {
+		t.Fatalf("evidence = %#v", evidence)
+	}
+	if got := store.objects[wantedKey].body; !bytes.Equal(got, []byte("camera bytes")) {
+		t.Fatalf("stored body = %q", got)
+	}
+	verified, err := archive.Verify(context.Background(), evidence)
+	if err != nil || !verified {
+		t.Fatalf("verify = %t, %v", verified, err)
+	}
+	second, err := archive.Deliver(context.Background(), sourceRoot, "camera-one", item)
+	if err != nil || second != evidence || store.uploads != 1 {
+		t.Fatalf("idempotent delivery = %#v, uploads=%d, err=%v", second, store.uploads, err)
+	}
+}
+
+func TestS3ArchiveRefusesExistingObjectWithMismatchedEvidence(t *testing.T) {
+	sourceRoot := t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
+	store := newFakeS3Store()
+	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, uploader: store}
+	digest, err := hashStableSource(context.Background(), sourceRoot, item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := contentLocation("camera", digest, item.Path)
+	store.objects[key] = fakeS3Object{body: []byte("other"), metadata: map[string]string{"djpi-sha256": "wrong", "djpi-size": fmt.Sprint(item.SizeBytes)}}
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil {
+		t.Fatal("expected existing-object conflict")
+	}
+	if store.uploads != 0 {
+		t.Fatalf("unexpected uploads: %d", store.uploads)
+	}
+}
+
+func TestS3ArchiveRejectsUnsafeSourcePathAndNamespace(t *testing.T) {
+	store := newFakeS3Store()
+	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, uploader: store}
+	if _, err := archive.Deliver(context.Background(), t.TempDir(), "camera", fixtureUnsafeItem("../escape")); err == nil {
+		t.Fatal("expected unsafe path refusal")
+	}
+	if _, err := archive.Deliver(context.Background(), t.TempDir(), "../camera", fixtureUnsafeItem("clip.mp4")); err == nil {
+		t.Fatal("expected unsafe namespace refusal")
+	}
+}
+
+func fixtureUnsafeItem(path string) source.ObservedItem {
+	return source.ObservedItem{Path: path, SizeBytes: 1}
+}

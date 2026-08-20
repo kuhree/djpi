@@ -12,7 +12,7 @@ func TestStorePersistsAtomicJournalUpdate(t *testing.T) {
 	store := NewStore(path)
 	err := store.Update(func(state *State) error {
 		state.Sources["camera/source"] = SourceRecord{Camera: "DJI Osmo Pocket 3", MetadataEvidenceID: "metadata-sha256:test", Items: map[string]ItemRecord{
-			"DCIM/DJI_001/test.MP4": {SizeBytes: 42, ContentDigest: "sha256:abc", Deliveries: map[string]DeliveryRecord{"archive": {State: "verified", SizeBytes: 42, ContentDigest: "sha256:abc"}}},
+			"DCIM/DJI_001/test.MP4": {SizeBytes: 42, ContentDigest: "sha256:abc", Deliveries: map[string]DeliveryRecord{"archive": {State: "verified", SizeBytes: 42, ContentDigest: "sha256:abc", Location: "camera/sha256/abc/DCIM/DJI_001/test.MP4"}}},
 		}}
 		return nil
 	})
@@ -40,6 +40,22 @@ func TestStorePersistsAtomicJournalUpdate(t *testing.T) {
 	}
 	if len(leftovers) != 0 {
 		t.Fatalf("temporary journals remain: %v", leftovers)
+	}
+}
+
+func TestStoreMigratesVersionOneLocalDeliveryLocation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.json")
+	legacy := `{"version":1,"sources":{"source":{"camera":"camera","metadata_evidence_id":"metadata","items":{"DCIM/clip.MP4":{"size_bytes":4,"content_digest":"sha256:test","deliveries":{"archive":{"state":"verified","size_bytes":4,"content_digest":"sha256:test"}}}}}}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := NewStore(path).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery := state.Sources["source"].Items["DCIM/clip.MP4"].Deliveries["archive"]
+	if state.Version != CurrentVersion || delivery.Location != "DCIM/clip.MP4" {
+		t.Fatalf("migrated state = %#v", state)
 	}
 }
 

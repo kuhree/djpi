@@ -21,12 +21,15 @@ type LocalArchive struct {
 
 func (d LocalArchive) Name() string { return d.DestinationName }
 
-func (d LocalArchive) Deliver(ctx context.Context, sourceRoot string, item source.ObservedItem) (Evidence, error) {
+func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (Evidence, error) {
 	if d.DestinationName == "" {
 		return Evidence{}, errors.New("local destination has no name")
 	}
 	if d.Root == "" {
 		return Evidence{}, errors.New("local destination has no root")
+	}
+	if _, err := safeNamespace(namespace); err != nil {
+		return Evidence{}, err
 	}
 	if err := pathguard.RefuseInside(sourceRoot, d.Root); err != nil {
 		return Evidence{}, err
@@ -36,7 +39,6 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot string, item sourc
 		return Evidence{}, err
 	}
 	sourcePath := filepath.Join(sourceRoot, relative)
-	destinationPath := filepath.Join(d.Root, relative)
 
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
@@ -50,10 +52,11 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot string, item sourc
 	if !info.Mode().IsRegular() || info.Size() != item.SizeBytes || info.ModTime().UnixNano() != item.ModifiedUnixNanos {
 		return Evidence{}, fmt.Errorf("source item changed since inventory: %s", item.Path)
 	}
-	if err := os.MkdirAll(filepath.Dir(destinationPath), 0o700); err != nil {
+	stagingDirectory := filepath.Join(d.Root, ".staging")
+	if err := os.MkdirAll(stagingDirectory, 0o700); err != nil {
 		return Evidence{}, err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(destinationPath), ".djpi-*.tmp")
+	temporary, err := os.CreateTemp(stagingDirectory, ".djpi-*.tmp")
 	if err != nil {
 		return Evidence{}, err
 	}
@@ -82,12 +85,17 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot string, item sourc
 		return Evidence{}, err
 	}
 	evidence := Evidence{SizeBytes: written, ContentDigest: fmt.Sprintf("sha256:%x", hash.Sum(nil))}
+	evidence.Location = contentLocation(namespace, evidence.ContentDigest, item.Path)
+	destinationPath := filepath.Join(d.Root, filepath.FromSlash(evidence.Location))
 	sourceStable, err := verifyPath(ctx, sourcePath, evidence)
 	if err != nil {
 		return Evidence{}, err
 	}
 	if !sourceStable {
 		return Evidence{}, fmt.Errorf("source content changed while delivering %s", item.Path)
+	}
+	if err := os.MkdirAll(filepath.Dir(destinationPath), 0o700); err != nil {
+		return Evidence{}, err
 	}
 
 	if existing, verifyErr := verifyPath(ctx, destinationPath, evidence); verifyErr != nil {
@@ -116,12 +124,24 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot string, item sourc
 	return evidence, nil
 }
 
-func (d LocalArchive) Verify(ctx context.Context, item source.ObservedItem, evidence Evidence) (bool, error) {
-	relative, err := safeRelativePath(item.Path)
+func (d LocalArchive) Verify(ctx context.Context, evidence Evidence) (bool, error) {
+	relative, err := safeRelativePath(evidence.Location)
 	if err != nil {
 		return false, err
 	}
 	return verifyPath(ctx, filepath.Join(d.Root, relative), evidence)
+}
+
+func safeNamespace(namespace string) (string, error) {
+	if namespace == "" || namespace == "." || namespace == ".." || strings.ContainsAny(namespace, "/\\\x00") {
+		return "", fmt.Errorf("unsafe destination namespace %q", namespace)
+	}
+	return namespace, nil
+}
+
+func contentLocation(namespace, digest, itemPath string) string {
+	digestPath := strings.TrimPrefix(digest, "sha256:")
+	return filepath.ToSlash(filepath.Join(namespace, "sha256", digestPath, filepath.FromSlash(itemPath)))
 }
 
 func safeRelativePath(path string) (string, error) {

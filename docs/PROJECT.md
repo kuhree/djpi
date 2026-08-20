@@ -69,13 +69,15 @@ Observed hardware notes are kept under [`docs/hardware`](hardware/), including
 the USB mass-storage presentations for the [Action 6](hardware/action-6-usb.md)
 and [Pocket 3](hardware/pocket-3-usb.md).
 
-### Phase 1: wired, read-only ingest
+### Phase 1: wired, non-destructive ingest
 
 - React to USB or SD-reader attachment.
 - Build a complete Source Snapshot.
-- Transfer to one S3-compatible destination with a durable journal.
+- Transfer to one or more local or S3-compatible destinations with a durable
+  journal.
 - Resume safely after disconnect, destination outage, or process restart.
-- Verify content and report Ready for Cleanup without changing the source.
+- Verify content and report ingest completion without treating that report as
+  Cleanup authorization or changing the source.
 
 ### Phase 2: destinations and controlled cleanup
 

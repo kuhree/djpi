@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 type State struct {
 	Version int                     `json:"version"`
@@ -35,6 +35,7 @@ type DeliveryRecord struct {
 	State         string    `json:"state"`
 	SizeBytes     int64     `json:"size_bytes"`
 	ContentDigest string    `json:"content_digest,omitempty"`
+	Location      string    `json:"location,omitempty"`
 	VerifiedAt    time.Time `json:"verified_at,omitempty"`
 	Error         string    `json:"error,omitempty"`
 }
@@ -85,6 +86,9 @@ func (s *Store) load() (State, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return State{}, fmt.Errorf("decode ingest journal: %w", err)
 	}
+	if state.Version == 1 {
+		state = migrateVersion1(state)
+	}
 	if state.Version != CurrentVersion {
 		return State{}, fmt.Errorf("unsupported ingest journal version %d", state.Version)
 	}
@@ -92,6 +96,26 @@ func (s *Store) load() (State, error) {
 		state.Sources = make(map[string]SourceRecord)
 	}
 	return state, nil
+}
+
+// Version 1 only supported local archives, whose location was the original
+// relative Source path. Preserve that location so existing verified deliveries
+// can still be checked after content-addressed destinations are introduced.
+func migrateVersion1(state State) State {
+	for sourceID, sourceRecord := range state.Sources {
+		for itemPath, itemRecord := range sourceRecord.Items {
+			for name, delivery := range itemRecord.Deliveries {
+				if delivery.State == "verified" && delivery.Location == "" {
+					delivery.Location = itemPath
+					itemRecord.Deliveries[name] = delivery
+				}
+			}
+			sourceRecord.Items[itemPath] = itemRecord
+		}
+		state.Sources[sourceID] = sourceRecord
+	}
+	state.Version = CurrentVersion
+	return state
 }
 
 func (s *Store) save(state State) error {

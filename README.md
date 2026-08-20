@@ -4,8 +4,8 @@
 DJI Osmo Pocket 3.
 
 The target experience is simple: connect a camera, ingest every media item,
-verify delivery to the configured destinations, and safely clear the source so
-the camera is ready for the next shoot.
+verify delivery to the configured destinations, and report when the source is
+ready for a separately proven cleanup operation.
 
 The intended runtime is an always-running service on the Raspberry Pi. Plugging
 in a camera should be the only routine operator action; the CLI commands below
@@ -18,15 +18,18 @@ community control, wireless browsing and transfer, and USB/UVC capture.
 
 ## Status
 
-The repository is newly scaffolded. It currently contains the domain safety
-gate and the researched implementation plan; it does not yet connect to or
-modify a camera.
+The wired, non-destructive ingest path recognizes hardware-observed Action 6
+and Pocket 3 USB mass-storage presentations, inventories an already mounted
+camera, and durably delivers every regular file to one or more local or
+S3-compatible archives. It records full SHA-256 evidence and verifies every
+destination before reporting completion. It never deletes or formats camera
+storage.
 
 ## First vertical slice
 
 1. Detect an Action 6 or Pocket 3 connected over USB.
 2. Inventory all media without changing it.
-3. Copy to one configured S3-compatible destination.
+3. Copy to every configured local and S3-compatible destination.
 4. verify the copied size and content digest.
 5. Persist the result so reconnecting is idempotent.
 6. Report whether cleanup is safe, without performing cleanup yet.
@@ -68,15 +71,19 @@ an unreadable or unsupported entry such as a symlink.
 `djpi serve` is the long-running station process. It polls the same fail-closed
 hardware boundary, emits newline-delimited JSON state events, inventories a
 Source once per attachment, and resets after removal. The current service is
-read-only unless a configuration is supplied. With a local Destination, it
-copies each Source item through a same-directory temporary file, syncs and
-atomically commits it, independently re-hashes the committed bytes, and records
-the evidence in a crash-safe journal. Reconnects skip a Delivery only after
-both Source and Destination content still match the journal. See
-[`djpi.example.json`](djpi.example.json).
+read-only unless a configuration is supplied. With configured Destinations, it
+stores immutable objects under a camera and content-digest namespace and
+records the evidence in a crash-safe journal. Local files are atomically
+committed and independently re-hashed. S3-compatible objects use multipart
+upload with SDK transfer checksums plus djpi SHA-256 and size metadata verified
+through `HeadObject`. Reconnects skip a Delivery only after both Source and
+Destination evidence still match the journal. See [`djpi.example.json`](djpi.example.json)
+and [`docs/configuration.md`](docs/configuration.md).
 
 Journal Source identities use a one-way digest of the hardware-correlated
 camera serial; raw camera serials are not written into correlated station
 events or journal keys.
 
-Cleanup is not implemented or enabled by any configuration.
+Cleanup is not implemented or enabled by any configuration. A completed ingest
+event means the configured deliveries verified; it is not authorization to
+delete or format the camera.

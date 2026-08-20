@@ -17,9 +17,17 @@ type Config struct {
 }
 
 type Destination struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	Path string `json:"path,omitempty"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Path            string `json:"path,omitempty"`
+	Endpoint        string `json:"endpoint,omitempty"`
+	Region          string `json:"region,omitempty"`
+	Bucket          string `json:"bucket,omitempty"`
+	Prefix          string `json:"prefix,omitempty"`
+	UsePathStyle    bool   `json:"use_path_style,omitempty"`
+	AccessKeyEnv    string `json:"access_key_env,omitempty"`
+	SecretKeyEnv    string `json:"secret_key_env,omitempty"`
+	SessionTokenEnv string `json:"session_token_env,omitempty"`
 }
 
 func Load(path string) (Config, error) {
@@ -58,11 +66,29 @@ func (c Config) Validate() error {
 			return fmt.Errorf("duplicate destination name %q", destination.Name)
 		}
 		seen[destination.Name] = struct{}{}
-		if destination.Type != "local" {
+		switch destination.Type {
+		case "local":
+			if destination.Path == "" {
+				return fmt.Errorf("local destination %q requires path", destination.Name)
+			}
+			if destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" {
+				return fmt.Errorf("local destination %q contains S3-only settings", destination.Name)
+			}
+		case "s3":
+			if destination.Path != "" {
+				return fmt.Errorf("S3 destination %q cannot contain path", destination.Name)
+			}
+			if destination.Region == "" || destination.Bucket == "" {
+				return fmt.Errorf("S3 destination %q requires region and bucket", destination.Name)
+			}
+			if (destination.AccessKeyEnv == "") != (destination.SecretKeyEnv == "") {
+				return fmt.Errorf("S3 destination %q must configure both access_key_env and secret_key_env", destination.Name)
+			}
+			if destination.SessionTokenEnv != "" && destination.AccessKeyEnv == "" {
+				return fmt.Errorf("S3 destination %q cannot configure session_token_env without key environment names", destination.Name)
+			}
+		default:
 			return fmt.Errorf("destination %q has unsupported type %q", destination.Name, destination.Type)
-		}
-		if destination.Path == "" {
-			return fmt.Errorf("local destination %q requires path", destination.Name)
 		}
 	}
 	_, err := c.ParsedPollInterval()

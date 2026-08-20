@@ -95,7 +95,7 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 			itemRecord = record.Items[item.Path]
 			previous, hadPrevious := itemRecord.Deliveries[target.Name()]
 			if hadPrevious && previous.State == "verified" && previous.ContentDigest == itemRecord.ContentDigest {
-				verified, verifyErr := target.Verify(ctx, item, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest})
+				verified, verifyErr := target.Verify(ctx, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest, Location: previous.Location})
 				if verifyErr == nil && verified {
 					result.Skipped++
 					continue
@@ -106,7 +106,7 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 				}
 			}
 
-			evidence, deliveryErr := target.Deliver(ctx, sourceRoot, item)
+			evidence, deliveryErr := target.Deliver(ctx, sourceRoot, camera, item)
 			if deliveryErr != nil {
 				result.addFailure(item.Path, target.Name(), deliveryErr)
 				if err := e.recordFailure(result.SourceID, item.Path, target.Name(), deliveryErr); err != nil {
@@ -124,7 +124,7 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 				return result, err
 			}
 			itemRecord.ContentDigest = evidence.ContentDigest
-			itemRecord.Deliveries[target.Name()] = journal.DeliveryRecord{State: "verified", SizeBytes: evidence.SizeBytes, ContentDigest: evidence.ContentDigest, VerifiedAt: e.now()}
+			itemRecord.Deliveries[target.Name()] = journal.DeliveryRecord{State: "verified", SizeBytes: evidence.SizeBytes, ContentDigest: evidence.ContentDigest, Location: evidence.Location, VerifiedAt: e.now()}
 			record.Items[item.Path] = itemRecord
 			result.Verified++
 		}
@@ -173,7 +173,7 @@ func (e Engine) recordVerified(sourceID, itemPath, destinationName string, evide
 			return errors.New("source content digest changed during ingest")
 		}
 		item.ContentDigest = evidence.ContentDigest
-		item.Deliveries[destinationName] = journal.DeliveryRecord{State: "verified", SizeBytes: evidence.SizeBytes, ContentDigest: evidence.ContentDigest, VerifiedAt: e.now()}
+		item.Deliveries[destinationName] = journal.DeliveryRecord{State: "verified", SizeBytes: evidence.SizeBytes, ContentDigest: evidence.ContentDigest, Location: evidence.Location, VerifiedAt: e.now()}
 		record.Items[itemPath] = item
 		state.Sources[sourceID] = record
 		return nil
