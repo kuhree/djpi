@@ -45,6 +45,18 @@ func writeTextReport(w io.Writer, report Report) error {
 	}
 	writeFilesystems(w, report.Filesystems, "  ")
 
+	write("\nCorrelated camera Sources (%d)\n", len(report.SourceCandidates))
+	if len(report.SourceCandidates) == 0 {
+		write("  none found from hardware-observed identities and matching USB/block evidence\n")
+	}
+	for _, candidate := range report.SourceCandidates {
+		write("  %s usb=%s block=%s size=%d filesystem=%s label=%s mount=%s block-read-only=%t mount-read-only=%t\n",
+			candidate.CameraModel, candidate.USBDevice, candidate.BlockPath, candidate.SizeBytes,
+			candidate.Filesystem, showUnknown(candidate.Label), showUnknown(candidate.Mountpoint),
+			candidate.BlockReadOnly, candidate.MountReadOnly)
+		write("    evidence: %s\n", candidate.IdentityEvidence)
+	}
+
 	write("\nMTP evidence\n")
 	if len(report.MTP.PotentialInterfaces) == 0 {
 		write("  no USB imaging/PTP interfaces visible\n")
@@ -76,7 +88,7 @@ func writeTextReport(w io.Writer, report Report) error {
 		}
 	}
 	write("\nCamera identity\n")
-	write("  No USB IDs are assumed. Connect one camera at a time and preserve `djpi probe --json` output for characterization.\n")
+	write("  Only repository hardware-observed USB IDs are recognized. Unknown IDs remain unlabeled raw evidence.\n")
 	return nil
 }
 

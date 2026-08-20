@@ -116,7 +116,7 @@ func TestTextReportStatesSafetyAndIdentityLimits(t *testing.T) {
 	if err := WriteReport(&output, Report{MTP: MTPEvidence{Tools: map[string]string{"gio": "unavailable"}}}, false); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"read-only host probe", "No devices are mounted, copied, deleted, or formatted", "No USB IDs are assumed"} {
+	for _, want := range []string{"read-only host probe", "No devices are mounted, copied, deleted, or formatted", "Only repository hardware-observed USB IDs are recognized"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output did not contain %q:\n%s", want, output.String())
 		}

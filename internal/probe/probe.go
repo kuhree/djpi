@@ -19,11 +19,12 @@ const usbRoot = "/sys/bus/usb/devices"
 // Report is a machine-readable snapshot of evidence visible to the local Linux host.
 // It intentionally makes no claims about camera identity from unverified USB IDs.
 type Report struct {
-	USB         []USBDevice   `json:"usb"`
-	Block       []BlockDevice `json:"block"`
-	Filesystems []Filesystem  `json:"filesystems"`
-	MTP         MTPEvidence   `json:"mtp"`
-	Warnings    []string      `json:"warnings,omitempty"`
+	USB              []USBDevice       `json:"usb"`
+	Block            []BlockDevice     `json:"block"`
+	Filesystems      []Filesystem      `json:"filesystems"`
+	MTP              MTPEvidence       `json:"mtp"`
+	SourceCandidates []SourceCandidate `json:"source_candidates,omitempty"`
+	Warnings         []string          `json:"warnings,omitempty"`
 }
 
 type USBDevice struct {
@@ -131,6 +132,7 @@ func (c Collector) Collect() Report {
 	}
 
 	report.MTP = c.collectMTP(report.USB, report.Filesystems)
+	report.SourceCandidates = correlateSources(report.USB, report.Block, report.Filesystems)
 	sort.Strings(report.Warnings)
 	return report
 }
@@ -221,7 +223,7 @@ func (c Collector) collectBlock() ([]BlockDevice, error) {
 	convert = func(raw wireBlock) BlockDevice {
 		device := BlockDevice{Name: raw.Name, Path: raw.Path, Type: raw.Type, Size: raw.Size, Removable: raw.Removable,
 			ReadOnly: raw.ReadOnly, Transport: raw.Transport, Filesystem: raw.Filesystem, Label: raw.Label, UUID: raw.UUID,
-			Vendor: strings.TrimSpace(raw.Vendor), Model: strings.TrimSpace(raw.Model), Serial: raw.Serial, WWN: raw.WWN}
+			Vendor: strings.TrimSpace(raw.Vendor), Model: strings.TrimSpace(raw.Model), Serial: strings.TrimSpace(raw.Serial), WWN: raw.WWN}
 		for _, mountpoint := range raw.Mountpoints {
 			if mountpoint != nil {
 				device.Mountpoints = append(device.Mountpoints, *mountpoint)

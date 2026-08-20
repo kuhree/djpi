@@ -38,6 +38,18 @@ but a generic camera-plugin framework is not an MVP goal.
   Immich's catalog state the only preserved copy.
 - **Operator surface**: CLI first, then a small local web UI and notifications.
 
+## Runtime model
+
+djpi is primarily an always-running Raspberry Pi station service. Its steady
+state is idle observation; connecting a camera starts detection, Source
+inventory, Delivery, and verification without requiring an operator command.
+The `probe` and `inventory` commands are diagnostic surfaces for hardware
+characterization and service troubleshooting, not the routine product flow.
+
+The service must fail closed on unknown or ambiguous hardware and remain
+non-destructive unless the cleanup safety gate and the independently proven
+camera-specific cleanup mechanism both permit an operation.
+
 ## Delivery phases
 
 ### Phase 0: hardware characterization

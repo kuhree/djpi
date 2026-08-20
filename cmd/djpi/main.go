@@ -28,7 +28,7 @@ func run(args []string) int {
 	}
 
 	fmt.Fprintln(os.Stderr, "djpi is not configured yet")
-	fmt.Fprintln(os.Stderr, "usage: djpi <version|probe [--json]|inventory --source PATH [--json]>")
+	fmt.Fprintln(os.Stderr, "usage: djpi <version|probe [--json]|inventory [--source PATH] [--json]>")
 	return 2
 }
 
@@ -37,13 +37,25 @@ func runInventory(args []string) int {
 	flags.SetOutput(os.Stderr)
 	sourcePath := flags.String("source", "", "existing mounted source directory")
 	jsonOutput := flags.Bool("json", false, "write machine-readable JSON")
-	flags.Usage = func() { fmt.Fprintln(os.Stderr, "usage: djpi inventory --source PATH [--json]") }
+	flags.Usage = func() { fmt.Fprintln(os.Stderr, "usage: djpi inventory [--source PATH] [--json]") }
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if *sourcePath == "" || flags.NArg() != 0 {
+	if flags.NArg() != 0 {
 		flags.Usage()
 		return 2
+	}
+	if *sourcePath == "" {
+		report := probe.NewSystemCollector().Collect()
+		candidate, err := probe.SingleMountedSource(report.SourceCandidates)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "auto-discover source: %v\n", err)
+			return 1
+		}
+		*sourcePath = candidate.Mountpoint
+		if !candidate.MountReadOnly {
+			fmt.Fprintf(os.Stderr, "warning: auto-discovered source %s is mounted read-write; djpi will only read it\n", candidate.Mountpoint)
+		}
 	}
 
 	observation, err := sourceinventory.InventoryPath(*sourcePath)

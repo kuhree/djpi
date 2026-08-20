@@ -7,6 +7,11 @@ The target experience is simple: connect a camera, ingest every media item,
 verify delivery to the configured destinations, and safely clear the source so
 the camera is ready for the next shoot.
 
+The intended runtime is an always-running service on the Raspberry Pi. Plugging
+in a camera should be the only routine operator action; the CLI commands below
+are diagnostics and development tools for the same detection and inventory
+boundaries used by that service.
+
 The project will also expose the useful control surfaces already available for
 these cameras: Action 6 BLE control/status through DJI's R SDK, Pocket 3
 community control, wireless browsing and transfer, and USB/UVC capture.
@@ -35,6 +40,7 @@ go test ./...
 go run ./cmd/djpi version
 go run ./cmd/djpi probe
 go run ./cmd/djpi probe --json
+go run ./cmd/djpi inventory
 go run ./cmd/djpi inventory --source /path/to/existing/source
 go run ./cmd/djpi inventory --source /path/to/existing/source --json
 ```
@@ -45,7 +51,11 @@ copy, delete, or format anything. The JSON form is intended for recording one
 camera at a time during hardware characterization; djpi does not guess camera
 identity from unverified USB IDs.
 
-`djpi inventory` walks an already-mounted Source without opening file contents
+`djpi inventory` correlates repository-verified camera USB evidence with Linux
+block-device serial evidence and automatically selects exactly one mounted
+Source. It fails closed if no Source is mounted or more than one is eligible;
+`--source` remains available for explicit characterization. It walks the
+already-mounted Source without opening file contents
 and records every regular file's relative path, size, and modification time.
 Its metadata evidence ID can detect changes between observations, but it is not
 a content digest, Delivery verification, or permission to perform Cleanup. The
