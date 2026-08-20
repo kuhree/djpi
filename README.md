@@ -1,0 +1,37 @@
+# djpi
+
+`djpi` is a Raspberry Pi camera station for the DJI Osmo Action 6 and
+DJI Osmo Pocket 3.
+
+The target experience is simple: connect a camera, ingest every media item,
+verify delivery to the configured destinations, and safely clear the source so
+the camera is ready for the next shoot.
+
+The project will also expose the useful control surfaces already available for
+these cameras: Action 6 BLE control/status through DJI's R SDK, Pocket 3
+community control, wireless browsing and transfer, and USB/UVC capture.
+
+## Status
+
+The repository is newly scaffolded. It currently contains the domain safety
+gate and the researched implementation plan; it does not yet connect to or
+modify a camera.
+
+## First vertical slice
+
+1. Detect an Action 6 or Pocket 3 connected over USB.
+2. Inventory all media without changing it.
+3. Copy to one configured S3-compatible destination.
+4. verify the copied size and content digest.
+5. Persist the result so reconnecting is idempotent.
+6. Report whether cleanup is safe, without performing cleanup yet.
+
+See [docs/PROJECT.md](docs/PROJECT.md) for the capability map and roadmap.
+
+## Development
+
+```console
+go test ./...
+go run ./cmd/djpi version
+```
+
