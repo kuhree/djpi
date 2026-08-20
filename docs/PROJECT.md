@@ -37,8 +37,8 @@ but a generic camera-plugin framework is not an MVP goal.
 - **Immich destination**: upload through Immich's supported API without making
   Immich's catalog state the only preserved copy.
 - **Operator surface**: structured service events, human and JSON status
-  commands, and an optional read-only local web UI with health checks;
-  notifications remain later work.
+  commands, and an optional read-only local web UI with health checks and live
+  daemon lifecycle/retry state; notifications remain later work.
 
 ## Runtime model
 

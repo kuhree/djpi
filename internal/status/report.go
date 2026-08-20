@@ -20,6 +20,7 @@ type Report struct {
 	Journal                JournalSummary          `json:"journal"`
 	Cleanup                CleanupStatus           `json:"cleanup"`
 	Warnings               []string                `json:"warnings,omitempty"`
+	Runtime                *RuntimeStatus          `json:"runtime,omitempty"`
 }
 
 type JournalSummary struct {

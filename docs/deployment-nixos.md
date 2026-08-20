@@ -110,6 +110,11 @@ records, and per-snapshot readiness for every currently configured destination.
 Its cleanup state is always explicitly unauthorized because cleanup is not
 implemented.
 
+The daemon's HTTP status additionally reports the current lifecycle event,
+camera, source snapshot size, failure message, and `retry_at` deadline. This
+remains available while an ingest call is busy because HTTP serving and the
+station loop have coordinated lifecycles but run concurrently.
+
 The module enables the read-only HTTP status page on loopback by default. It
 does not open a firewall port. Keep it on loopback and use a trusted VPN or an
 authenticated reverse proxy for remote access; binding a non-loopback address

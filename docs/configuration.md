@@ -28,6 +28,10 @@ read-only operator page at `/`, JSON evidence at `/api/v1/status`, liveness at
 the unauthenticated endpoint local; expose it through a trusted VPN or an
 authenticated reverse proxy if remote access is required. Omitting the field
 disables HTTP entirely. There are no action, upload, cleanup, or control routes.
+The API combines live daemon lifecycle state (`idle`, `ingesting`, `retrying`,
+`blocked`, or `complete`) with the durable ingest journal. The CLI `status`
+command runs in a separate process and therefore reports durable and hardware
+evidence without claiming to know the daemon's in-memory lifecycle.
 
 `destination_timeout` bounds each individual delivery or verification call.
 It defaults to six hours when omitted, which accommodates large video objects

@@ -124,7 +124,7 @@ func TestServiceIngestsAfterInventoryAndDoesNotRepeatCompletedAttachment(t *test
 	if inventor.calls != 1 || ingester.calls != 1 {
 		t.Fatalf("calls inventor=%d ingester=%d", inventor.calls, ingester.calls)
 	}
-	if len(events.events) != 3 || events.events[2].Type != "ingest_complete" || events.events[2].Verified != 2 {
+	if len(events.events) != 4 || events.events[2].Type != "ingest_started" || events.events[3].Type != "ingest_complete" || events.events[3].Verified != 2 {
 		t.Fatalf("unexpected events: %#v", events.events)
 	}
 }
@@ -142,12 +142,12 @@ func TestServiceBacksOffRepeatedIngestFailures(t *testing.T) {
 	if err := service.Step(); err != nil {
 		t.Fatal(err)
 	}
-	if ingester.calls != 1 || len(events.events) != 3 {
+	if ingester.calls != 1 || len(events.events) != 4 {
 		t.Fatalf("first attempt: calls=%d events=%#v", ingester.calls, events.events)
 	}
 	firstRetry := now.Add(initialIngestRetry)
-	if events.events[2].RetryAt == nil || !events.events[2].RetryAt.Equal(firstRetry) {
-		t.Fatalf("first retry = %#v", events.events[2].RetryAt)
+	if events.events[3].RetryAt == nil || !events.events[3].RetryAt.Equal(firstRetry) {
+		t.Fatalf("first retry = %#v", events.events[3].RetryAt)
 	}
 
 	now = firstRetry.Add(-time.Nanosecond)
@@ -197,5 +197,17 @@ func TestJSONEventSinkWritesOneJSONObjectPerLine(t *testing.T) {
 	}
 	if lines := strings.Count(output.String(), "\n"); lines != 1 {
 		t.Fatalf("expected one JSON line, got %q", output.String())
+	}
+}
+
+func TestMultiEventSinkEmitsInOrder(t *testing.T) {
+	first, second := &memoryEvents{}, &memoryEvents{}
+	sinks := MultiEventSink{first, nil, second}
+	event := Event{Type: "ingest_started"}
+	if err := sinks.Emit(event); err != nil {
+		t.Fatal(err)
+	}
+	if len(first.events) != 1 || len(second.events) != 1 || first.events[0].Type != event.Type || second.events[0].Type != event.Type {
+		t.Fatalf("first=%#v second=%#v", first.events, second.events)
 	}
 }

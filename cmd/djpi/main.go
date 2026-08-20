@@ -98,7 +98,9 @@ func runServe(args []string) int {
 	if *pollInterval > 0 {
 		interval = *pollInterval
 	}
-	service := station.NewService(station.SystemDetector{}, station.SystemInventor{}, station.NewJSONEventSink(os.Stdout))
+	runtimeTracker := stationstatus.NewRuntimeTracker(time.Now())
+	eventSink := station.MultiEventSink{runtimeTracker, station.NewJSONEventSink(os.Stdout)}
+	service := station.NewService(station.SystemDetector{}, station.SystemInventor{}, eventSink)
 	statusListen := ""
 	var statusHandler operatorhttp.ReportProvider
 	if *configPath != "" {
@@ -129,7 +131,15 @@ func runServe(args []string) int {
 		engine := &ingest.Engine{Journal: store, Destinations: destinations, OperationTimeout: destinationTimeout}
 		service.WithIngester(engine)
 		statusListen = configuration.StatusListen
-		statusHandler = func() (stationstatus.Report, error) { return buildStatusReport(configuration, store) }
+		statusHandler = func() (stationstatus.Report, error) {
+			report, err := buildStatusReport(configuration, store)
+			if err != nil {
+				return stationstatus.Report{}, err
+			}
+			runtime := runtimeTracker.Snapshot()
+			report.Runtime = &runtime
+			return report, nil
+		}
 	}
 	if *once {
 		if err := service.Step(); err != nil {

@@ -27,6 +27,21 @@ type EventSink interface {
 	Emit(Event) error
 }
 
+// MultiEventSink sends each event to every sink in order.
+type MultiEventSink []EventSink
+
+func (sinks MultiEventSink) Emit(event Event) error {
+	for _, sink := range sinks {
+		if sink == nil {
+			continue
+		}
+		if err := sink.Emit(event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type Event struct {
 	Time       time.Time  `json:"time"`
 	Type       string     `json:"type"`
@@ -139,6 +154,12 @@ func (s *Service) StepContext(ctx context.Context) error {
 	if !s.nextIngestTry.IsZero() && s.now().Before(s.nextIngestTry) {
 		return nil
 	}
+	started := candidateEvent(s.now(), "ingest_started", candidate)
+	started.EvidenceID = s.observation.EvidenceID
+	started.Files, started.Bytes = s.observation.Summary.Files, s.observation.Summary.Bytes
+	if err := s.events.Emit(started); err != nil {
+		return err
+	}
 	cameraIdentity := candidate.CameraID
 	if cameraIdentity == "" {
 		cameraIdentity = candidate.CameraModel
@@ -148,7 +169,7 @@ func (s *Service) StepContext(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		return s.ingestFailed(fmt.Sprintf("%v: %v", err, result.Failures), candidate)
+		return s.ingestFailed(fmt.Sprintf("%v: %v", err, result.Failures), candidate, result)
 	}
 	s.lastProblem, s.completedKey = "", key
 	s.retryFailures, s.nextIngestTry = 0, time.Time{}
@@ -158,12 +179,14 @@ func (s *Service) StepContext(ctx context.Context) error {
 	return s.events.Emit(event)
 }
 
-func (s *Service) ingestFailed(message string, candidate probe.SourceCandidate) error {
+func (s *Service) ingestFailed(message string, candidate probe.SourceCandidate, result ingest.Result) error {
 	delay := ingestRetryDelay(s.retryFailures)
 	s.retryFailures++
 	retryAt := s.now().UTC().Add(delay)
 	s.nextIngestTry = retryAt
 	event := candidateEvent(s.now(), "ingest_failed", candidate)
+	event.EvidenceID, event.Files, event.Bytes = s.observation.EvidenceID, s.observation.Summary.Files, s.observation.Summary.Bytes
+	event.Verified, event.Skipped, event.Failed = result.Verified, result.Skipped, result.Failed
 	event.Message = message
 	event.RetryAt = &retryAt
 	return s.events.Emit(event)

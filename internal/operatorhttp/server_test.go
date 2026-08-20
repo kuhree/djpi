@@ -13,7 +13,8 @@ import (
 )
 
 func TestReadOnlyOperatorEndpoints(t *testing.T) {
-	wanted := status.Report{Time: time.Unix(1, 0).UTC()}
+	runtime := status.RuntimeStatus{State: "ingesting", StartedAt: time.Unix(0, 0).UTC(), UpdatedAt: time.Unix(1, 0).UTC(), Files: 9}
+	wanted := status.Report{Time: time.Unix(1, 0).UTC(), Runtime: &runtime}
 	handler := Handler(func() (status.Report, error) { return wanted, nil })
 
 	for _, test := range []struct {
@@ -47,8 +48,8 @@ func TestReadOnlyOperatorEndpoints(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.Time.Equal(wanted.Time) {
-		t.Fatalf("report time = %v", got.Time)
+	if !got.Time.Equal(wanted.Time) || got.Runtime == nil || got.Runtime.State != "ingesting" || got.Runtime.Files != 9 {
+		t.Fatalf("report = %#v", got)
 	}
 }
 
