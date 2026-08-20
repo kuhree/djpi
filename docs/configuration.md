@@ -29,7 +29,7 @@ the unauthenticated endpoint local; expose it through a trusted VPN or an
 authenticated reverse proxy if remote access is required. Omitting the field
 disables HTTP entirely. There are no action, upload, cleanup, or control routes.
 The API combines live daemon lifecycle state (`idle`, `ingesting`, `retrying`,
-`blocked`, or `complete`) with the durable ingest journal. During ingest it also
+`reconciling`, `blocked`, or `complete`) with the durable ingest journal. During ingest it also
 reports the current item number/path, destination, and phase (`source-check`,
 `delivering`, `verifying`, `verified`, `skipped`, or `failed`). These progress
 fields are observational and never substitute for journaled verification. The
@@ -45,6 +45,12 @@ It defaults to six hours when omitted, which accommodates large video objects
 while ensuring a stalled filesystem or network request cannot hold the station
 forever. Cancellation is journaled as a failed delivery and enters the normal
 retry backoff.
+
+Completion also requires a post-delivery re-inventory with the same metadata
+evidence ID. If the source changed, the daemon reports `reconciling` and ingests
+the newly observed complete snapshot; if the re-inventory fails or is incomplete,
+completion remains blocked. This protects files added or changed during a long
+delivery without treating metadata identity as content or cleanup proof.
 
 The archive must not be inside the mounted camera source. Files are stored at
 `<camera-id>/sha256/<digest>/<camera-relative-path>` so two files with the same

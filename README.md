@@ -37,7 +37,8 @@ djpi never deletes or formats camera storage.
 3. Copy to every configured local, S3-compatible, and Immich destination.
 4. verify the copied size and content digest.
 5. Persist the result so reconnecting is idempotent.
-6. Report whether cleanup is safe, without performing cleanup yet.
+6. Re-inventory the Source and reconcile any change before completion.
+7. Report whether cleanup is safe, without performing cleanup yet.
 
 See [docs/PROJECT.md](docs/PROJECT.md) for the capability map and roadmap.
 
@@ -93,6 +94,11 @@ Destination failures are journaled and retried with exponential backoff from
 camera removal, or new attachment resets the backoff. Each destination call
 also has a configurable finite deadline (six hours by default), so a stalled
 network connection cannot wedge the daemon indefinitely.
+
+After every apparently successful ingest, the station performs a fresh metadata
+inventory. It emits `ingest_complete` only when that evidence still matches;
+otherwise it adopts the new complete snapshot and reconciles it on the next
+cycle. A failed or incomplete re-inventory blocks completion.
 
 When `status_listen` is configured, `djpi serve` exposes a read-only dashboard,
 JSON status, and health checks. The example binds to loopback because this

@@ -108,9 +108,11 @@ func runtimeState(eventType string) string {
 		return "complete"
 	case "ingest_failed":
 		return "retrying"
+	case "source_changed":
+		return "reconciling"
 	case "source_removed":
 		return "idle"
-	case "source_blocked", "inventory_failed", "inventory_incomplete":
+	case "source_blocked", "inventory_failed", "inventory_incomplete", "post_ingest_inventory_failed", "post_ingest_inventory_incomplete":
 		return "blocked"
 	default:
 		return "unknown"

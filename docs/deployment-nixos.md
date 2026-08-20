@@ -105,6 +105,11 @@ system journal. Destination failures include a `retry_at` timestamp and use
 bounded exponential backoff, while systemd still restarts the process after a
 fatal service or listener error.
 
+An `ingest_complete` event is emitted only after a second complete Source
+inventory matches the delivered snapshot. `source_changed` means the daemon
+adopted newer metadata and will reconcile it; post-ingest inventory failures
+remain blocked and retry rather than claiming the camera is ready.
+
 `djpi status` reports attachment evidence, aggregate verified/failed delivery
 records, missing/pending deliveries, the latest verification time, bounded
 item-level failure details, and per-snapshot readiness for every currently

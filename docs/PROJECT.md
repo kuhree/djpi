@@ -52,6 +52,10 @@ The service must fail closed on unknown or ambiguous hardware and remain
 non-destructive unless the cleanup safety gate and the independently proven
 camera-specific cleanup mechanism both permit an operation.
 
+Delivery completion requires a second complete Source inventory matching the
+one delivered. A changed snapshot is reconciled, while a failed or incomplete
+post-ingest inventory prevents completion.
+
 The `djpi serve` loop polls the Linux evidence boundary and emits structured
 events for Source detection, completed inventory, removal, and blocked states.
 Failed deliveries remain journaled and retry with bounded exponential backoff,

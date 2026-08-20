@@ -28,6 +28,12 @@ func TestRuntimeTrackerMapsLifecycleAndCopiesRetryDeadline(t *testing.T) {
 	if snapshot.RetryAt.Equal(retry) {
 		t.Fatal("tracker retained caller-owned retry pointer")
 	}
+	if err := tracker.Emit(station.Event{Time: time.Unix(13, 0), Type: "source_changed"}); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := tracker.Snapshot(); snapshot.State != "reconciling" {
+		t.Fatalf("reconciliation snapshot = %#v", snapshot)
+	}
 }
 
 func TestRuntimeTrackerAddsProgressWithoutReplacingLifecycleEvidence(t *testing.T) {

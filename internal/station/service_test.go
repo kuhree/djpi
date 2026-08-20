@@ -31,14 +31,31 @@ func (f *fakeDetector) Detect() (probe.SourceCandidate, bool, error) {
 }
 
 type fakeInventor struct {
-	observation sourceinventory.Observation
-	err         error
-	calls       int
+	observation  sourceinventory.Observation
+	observations []sourceinventory.Observation
+	err          error
+	errors       []error
+	calls        int
 }
 
 func (f *fakeInventor) Inventory(string) (sourceinventory.Observation, error) {
 	f.calls++
-	return f.observation, f.err
+	index := f.calls - 1
+	err := f.err
+	if len(f.errors) != 0 {
+		errorIndex := index
+		if errorIndex >= len(f.errors) {
+			errorIndex = len(f.errors) - 1
+		}
+		err = f.errors[errorIndex]
+	}
+	if len(f.observations) != 0 {
+		if index >= len(f.observations) {
+			index = len(f.observations) - 1
+		}
+		return f.observations[index], err
+	}
+	return f.observation, err
 }
 
 type memoryEvents struct{ events []Event }
@@ -121,11 +138,67 @@ func TestServiceIngestsAfterInventoryAndDoesNotRepeatCompletedAttachment(t *test
 	if err := service.Step(); err != nil {
 		t.Fatal(err)
 	}
-	if inventor.calls != 1 || ingester.calls != 1 {
+	if inventor.calls != 2 || ingester.calls != 1 {
 		t.Fatalf("calls inventor=%d ingester=%d", inventor.calls, ingester.calls)
 	}
 	if len(events.events) != 4 || events.events[2].Type != "ingest_started" || events.events[3].Type != "ingest_complete" || events.events[3].Verified != 2 {
 		t.Fatalf("unexpected events: %#v", events.events)
+	}
+}
+
+func TestServiceReconcilesSourceChangeBeforeCompletion(t *testing.T) {
+	candidate := probe.SourceCandidate{CameraModel: "DJI Osmo Pocket 3", Mountpoint: "/camera", MountReadOnly: true}
+	first := sourceinventory.Observation{Complete: true, EvidenceID: "metadata-sha256:first", Summary: sourceinventory.ObservationSummary{Files: 1, Bytes: 10}}
+	second := sourceinventory.Observation{Complete: true, EvidenceID: "metadata-sha256:second", Summary: sourceinventory.ObservationSummary{Files: 2, Bytes: 20}}
+	detector := &fakeDetector{values: []detection{{candidate: candidate, found: true}}}
+	inventor := &fakeInventor{observations: []sourceinventory.Observation{first, second, second}}
+	ingester := &fakeIngester{result: ingest.Result{Verified: 2}}
+	events := &memoryEvents{}
+	service := NewService(detector, inventor, events).WithIngester(ingester)
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if ingester.calls != 1 || events.events[len(events.events)-1].Type != "source_changed" || events.events[len(events.events)-1].EvidenceID != second.EvidenceID {
+		t.Fatalf("first reconciliation: calls=%d events=%#v", ingester.calls, events.events)
+	}
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if inventor.calls != 3 || ingester.calls != 2 || events.events[len(events.events)-1].Type != "ingest_complete" {
+		t.Fatalf("completed reconciliation: inventor=%d ingester=%d events=%#v", inventor.calls, ingester.calls, events.events)
+	}
+}
+
+func TestServiceRefusesCompletionWhenPostIngestInventoryIsIncomplete(t *testing.T) {
+	candidate := probe.SourceCandidate{CameraModel: "DJI Osmo Pocket 3", Mountpoint: "/camera", MountReadOnly: true}
+	complete := sourceinventory.Observation{Complete: true, EvidenceID: "metadata-sha256:complete"}
+	incomplete := sourceinventory.Observation{Complete: false, Issues: []string{"DCIM: unavailable"}}
+	detector := &fakeDetector{values: []detection{{candidate: candidate, found: true}}}
+	inventor := &fakeInventor{observations: []sourceinventory.Observation{complete, incomplete}}
+	events := &memoryEvents{}
+	service := NewService(detector, inventor, events).WithIngester(&fakeIngester{})
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	last := events.events[len(events.events)-1]
+	if last.Type != "post_ingest_inventory_incomplete" || service.completedKey != "" || service.inventoriedKey != "" {
+		t.Fatalf("unsafe completion state: event=%#v completed=%q inventoried=%q", last, service.completedKey, service.inventoriedKey)
+	}
+}
+
+func TestServiceRefusesCompletionWhenPostIngestInventoryFails(t *testing.T) {
+	candidate := probe.SourceCandidate{CameraModel: "DJI Osmo Pocket 3", Mountpoint: "/camera", MountReadOnly: true}
+	complete := sourceinventory.Observation{Complete: true, EvidenceID: "metadata-sha256:complete"}
+	detector := &fakeDetector{values: []detection{{candidate: candidate, found: true}}}
+	inventor := &fakeInventor{observations: []sourceinventory.Observation{complete, {}}, errors: []error{nil, errors.New("camera disconnected")}}
+	events := &memoryEvents{}
+	service := NewService(detector, inventor, events).WithIngester(&fakeIngester{})
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	last := events.events[len(events.events)-1]
+	if last.Type != "post_ingest_inventory_failed" || !strings.Contains(last.Message, "camera disconnected") || service.completedKey != "" {
+		t.Fatalf("unsafe completion state: event=%#v completed=%q", last, service.completedKey)
 	}
 }
 

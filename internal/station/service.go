@@ -171,6 +171,30 @@ func (s *Service) StepContext(ctx context.Context) error {
 		}
 		return s.ingestFailed(fmt.Sprintf("%v: %v", err, result.Failures), candidate, result)
 	}
+	confirmed, err := s.inventor.Inventory(candidate.Mountpoint)
+	if err != nil {
+		s.inventoriedKey, s.observation = "", sourceinventory.Observation{}
+		return s.problem("post_ingest_inventory_failed", fmt.Sprintf("re-inventory after delivery: %v", err), candidate)
+	}
+	if !confirmed.Complete {
+		message := "post-ingest source inventory is incomplete"
+		if len(confirmed.Issues) != 0 {
+			message = fmt.Sprintf("%s: %v", message, confirmed.Issues)
+		}
+		s.inventoriedKey, s.observation = "", sourceinventory.Observation{}
+		return s.problem("post_ingest_inventory_incomplete", message, candidate)
+	}
+	if confirmed.EvidenceID != s.observation.EvidenceID {
+		previousEvidence := s.observation.EvidenceID
+		s.observation = confirmed
+		s.inventoriedKey = key
+		s.retryFailures, s.nextIngestTry = 0, time.Time{}
+		event := candidateEvent(s.now(), "source_changed", candidate)
+		event.EvidenceID, event.Files, event.Bytes = confirmed.EvidenceID, confirmed.Summary.Files, confirmed.Summary.Bytes
+		event.Message = fmt.Sprintf("source changed during ingest; reconciling snapshot %s after %s", confirmed.EvidenceID, previousEvidence)
+		return s.events.Emit(event)
+	}
+	s.observation = confirmed
 	s.lastProblem, s.completedKey = "", key
 	s.retryFailures, s.nextIngestTry = 0, time.Time{}
 	event := candidateEvent(s.now(), "ingest_complete", candidate)
