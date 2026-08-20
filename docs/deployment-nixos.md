@@ -100,7 +100,9 @@ curl --fail http://127.0.0.1:8787/api/v1/status
 The journal and default local archive live under `/var/lib/djpi`. The service
 restarts after failures, rechecks durable destination evidence after a process
 restart or camera reconnect, and emits newline-delimited JSON events to the
-system journal.
+system journal. Destination failures include a `retry_at` timestamp and use
+bounded exponential backoff, while systemd still restarts the process after a
+fatal service or listener error.
 
 `djpi status` reports attachment evidence, aggregate verified/failed delivery
 records, and per-snapshot readiness for every currently configured destination.

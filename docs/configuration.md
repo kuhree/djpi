@@ -74,7 +74,8 @@ Pi memory and remote garbage bounded.
 Multiple destinations may be listed. Every item must verify at every listed
 destination before the station emits `ingest_complete`. Failures remain in the
 durable journal and are retried while the same camera stays attached or after a
-reconnect.
+reconnect. In-process retries back off from 10 seconds to a maximum of 5 minutes;
+removal, a new attachment, or success resets that delay.
 
 ## Immich catalog
 

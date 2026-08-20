@@ -28,18 +28,19 @@ type EventSink interface {
 }
 
 type Event struct {
-	Time       time.Time `json:"time"`
-	Type       string    `json:"type"`
-	Camera     string    `json:"camera,omitempty"`
-	BlockPath  string    `json:"block_path,omitempty"`
-	SourcePath string    `json:"source_path,omitempty"`
-	EvidenceID string    `json:"metadata_evidence_id,omitempty"`
-	Files      int       `json:"files,omitempty"`
-	Bytes      int64     `json:"bytes,omitempty"`
-	Verified   int       `json:"verified,omitempty"`
-	Skipped    int       `json:"skipped,omitempty"`
-	Failed     int       `json:"failed,omitempty"`
-	Message    string    `json:"message,omitempty"`
+	Time       time.Time  `json:"time"`
+	Type       string     `json:"type"`
+	Camera     string     `json:"camera,omitempty"`
+	BlockPath  string     `json:"block_path,omitempty"`
+	SourcePath string     `json:"source_path,omitempty"`
+	EvidenceID string     `json:"metadata_evidence_id,omitempty"`
+	Files      int        `json:"files,omitempty"`
+	Bytes      int64      `json:"bytes,omitempty"`
+	Verified   int        `json:"verified,omitempty"`
+	Skipped    int        `json:"skipped,omitempty"`
+	Failed     int        `json:"failed,omitempty"`
+	RetryAt    *time.Time `json:"retry_at,omitempty"`
+	Message    string     `json:"message,omitempty"`
 }
 
 type Ingester interface {
@@ -58,7 +59,14 @@ type Service struct {
 	inventoriedKey string
 	observation    sourceinventory.Observation
 	lastProblem    string
+	retryFailures  uint
+	nextIngestTry  time.Time
 }
+
+const (
+	initialIngestRetry = 10 * time.Second
+	maximumIngestRetry = 5 * time.Minute
+)
 
 func (s *Service) WithIngester(ingester Ingester) *Service { s.ingester = ingester; return s }
 
@@ -82,6 +90,7 @@ func (s *Service) StepContext(ctx context.Context) error {
 		}
 		event := Event{Time: s.now(), Type: "source_removed"}
 		s.currentKey, s.completedKey, s.inventoriedKey = "", "", ""
+		s.retryFailures, s.nextIngestTry = 0, time.Time{}
 		s.observation = sourceinventory.Observation{}
 		return s.events.Emit(event)
 	}
@@ -89,6 +98,7 @@ func (s *Service) StepContext(ctx context.Context) error {
 	key := sourceKey(candidate)
 	if key != s.currentKey {
 		s.currentKey, s.completedKey, s.inventoriedKey, s.lastProblem = key, "", "", ""
+		s.retryFailures, s.nextIngestTry = 0, time.Time{}
 		s.observation = sourceinventory.Observation{}
 		event := candidateEvent(s.now(), "source_detected", candidate)
 		if !candidate.MountReadOnly {
@@ -126,19 +136,51 @@ func (s *Service) StepContext(ctx context.Context) error {
 		s.completedKey = key
 		return nil
 	}
+	if !s.nextIngestTry.IsZero() && s.now().Before(s.nextIngestTry) {
+		return nil
+	}
 	cameraIdentity := candidate.CameraID
 	if cameraIdentity == "" {
 		cameraIdentity = candidate.CameraModel
 	}
 	result, err := s.ingester.Ingest(ctx, cameraIdentity, candidate.Mountpoint, s.observation)
 	if err != nil {
-		return s.problem("ingest_failed", fmt.Sprintf("%v: %v", err, result.Failures), candidate)
+		if ctx.Err() != nil {
+			return nil
+		}
+		return s.ingestFailed(fmt.Sprintf("%v: %v", err, result.Failures), candidate)
 	}
 	s.lastProblem, s.completedKey = "", key
+	s.retryFailures, s.nextIngestTry = 0, time.Time{}
 	event := candidateEvent(s.now(), "ingest_complete", candidate)
 	event.EvidenceID, event.Files, event.Bytes = s.observation.EvidenceID, s.observation.Summary.Files, s.observation.Summary.Bytes
 	event.Verified, event.Skipped, event.Failed = result.Verified, result.Skipped, result.Failed
 	return s.events.Emit(event)
+}
+
+func (s *Service) ingestFailed(message string, candidate probe.SourceCandidate) error {
+	delay := ingestRetryDelay(s.retryFailures)
+	s.retryFailures++
+	retryAt := s.now().UTC().Add(delay)
+	s.nextIngestTry = retryAt
+	event := candidateEvent(s.now(), "ingest_failed", candidate)
+	event.Message = message
+	event.RetryAt = &retryAt
+	return s.events.Emit(event)
+}
+
+func ingestRetryDelay(failures uint) time.Duration {
+	delay := initialIngestRetry
+	for count := uint(0); count < failures && delay < maximumIngestRetry; count++ {
+		if delay > maximumIngestRetry/2 {
+			return maximumIngestRetry
+		}
+		delay *= 2
+	}
+	if delay > maximumIngestRetry {
+		return maximumIngestRetry
+	}
+	return delay
 }
 
 func (s *Service) Run(ctx context.Context, interval time.Duration) error {

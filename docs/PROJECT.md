@@ -54,6 +54,8 @@ camera-specific cleanup mechanism both permit an operation.
 
 The `djpi serve` loop polls the Linux evidence boundary and emits structured
 events for Source detection, completed inventory, removal, and blocked states.
+Failed deliveries remain journaled and retry with bounded exponential backoff,
+so a destination outage does not create a tight hashing or API-request loop.
 The NixOS module uses hardware-specific udev events to request a safe read-only
 mount, after which the same polling state machine detects the Source. A later
 event-driven wake-up may reduce idle polling without changing that state

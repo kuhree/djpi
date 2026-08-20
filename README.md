@@ -86,6 +86,10 @@ Reconnects skip a Delivery only after both Source and Destination evidence
 still match the journal. See [`djpi.example.json`](djpi.example.json) and
 [`docs/configuration.md`](docs/configuration.md).
 
+Destination failures are journaled and retried with exponential backoff from
+10 seconds to 5 minutes while the camera remains attached. A successful ingest,
+camera removal, or new attachment resets the backoff.
+
 When `status_listen` is configured, `djpi serve` exposes a read-only dashboard,
 JSON status, and health checks. The example binds to loopback because this
 surface intentionally has no application-level authentication or mutation

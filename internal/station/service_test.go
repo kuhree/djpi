@@ -129,6 +129,53 @@ func TestServiceIngestsAfterInventoryAndDoesNotRepeatCompletedAttachment(t *test
 	}
 }
 
+func TestServiceBacksOffRepeatedIngestFailures(t *testing.T) {
+	candidate := probe.SourceCandidate{CameraModel: "DJI Osmo Pocket 3", Mountpoint: "/camera", MountReadOnly: true}
+	detector := &fakeDetector{values: []detection{{candidate: candidate, found: true}}}
+	inventor := &fakeInventor{observation: sourceinventory.Observation{Complete: true, EvidenceID: "metadata-sha256:test"}}
+	ingester := &fakeIngester{err: errors.New("destination unavailable")}
+	events := &memoryEvents{}
+	now := time.Unix(1_700_000_000, 0).UTC()
+	service := NewService(detector, inventor, events).WithIngester(ingester)
+	service.now = func() time.Time { return now }
+
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if ingester.calls != 1 || len(events.events) != 3 {
+		t.Fatalf("first attempt: calls=%d events=%#v", ingester.calls, events.events)
+	}
+	firstRetry := now.Add(initialIngestRetry)
+	if events.events[2].RetryAt == nil || !events.events[2].RetryAt.Equal(firstRetry) {
+		t.Fatalf("first retry = %#v", events.events[2].RetryAt)
+	}
+
+	now = firstRetry.Add(-time.Nanosecond)
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if ingester.calls != 1 {
+		t.Fatalf("ingest retried before deadline: %d", ingester.calls)
+	}
+
+	now = firstRetry
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if ingester.calls != 2 || events.events[len(events.events)-1].RetryAt == nil || !events.events[len(events.events)-1].RetryAt.Equal(now.Add(2*initialIngestRetry)) {
+		t.Fatalf("second attempt: calls=%d events=%#v", ingester.calls, events.events)
+	}
+}
+
+func TestIngestRetryDelayIsBounded(t *testing.T) {
+	if got := ingestRetryDelay(0); got != 10*time.Second {
+		t.Fatalf("first delay = %v", got)
+	}
+	if got := ingestRetryDelay(100); got != 5*time.Minute {
+		t.Fatalf("maximum delay = %v", got)
+	}
+}
+
 func TestServiceReportsBlockedDetectionWithoutInventoring(t *testing.T) {
 	detector := &fakeDetector{values: []detection{{err: errors.New("multiple mounted camera sources are ambiguous")}}}
 	inventor := &fakeInventor{}
