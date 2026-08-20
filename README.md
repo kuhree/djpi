@@ -33,5 +33,12 @@ See [docs/PROJECT.md](docs/PROJECT.md) for the capability map and roadmap.
 ```console
 go test ./...
 go run ./cmd/djpi version
+go run ./cmd/djpi probe
+go run ./cmd/djpi probe --json
 ```
 
+`djpi probe` performs a read-only inventory of Linux USB descriptors, block
+devices, mounted filesystems, and MTP-related evidence. It does not mount,
+copy, delete, or format anything. The JSON form is intended for recording one
+camera at a time during hardware characterization; djpi does not guess camera
+identity from unverified USB IDs.
