@@ -1,0 +1,11 @@
+{
+  "state_directory": "/var/lib/djpi",
+  "poll_interval": "2s",
+  "destinations": [
+    {
+      "name": "local-archive",
+      "type": "local",
+      "path": "/srv/djpi/archive"
+    }
+  ]
+}

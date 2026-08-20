@@ -1,11 +1,13 @@
 package station
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
 	"git.kuhree.com/kuhree.com/djpi/internal/probe"
 	sourceinventory "git.kuhree.com/kuhree.com/djpi/internal/source"
 )
@@ -75,6 +77,17 @@ func TestServiceInventoriesOncePerAttachmentAndResetsOnRemoval(t *testing.T) {
 	}
 }
 
+type fakeIngester struct {
+	result ingest.Result
+	err    error
+	calls  int
+}
+
+func (f *fakeIngester) Ingest(context.Context, string, string, sourceinventory.Observation) (ingest.Result, error) {
+	f.calls++
+	return f.result, f.err
+}
+
 func TestServiceRetriesInventoryAndDeduplicatesProblemEvent(t *testing.T) {
 	candidate := probe.SourceCandidate{CameraModel: "DJI Osmo Action 6", Mountpoint: "/camera"}
 	detector := &fakeDetector{values: []detection{{candidate: candidate, found: true}}}
@@ -92,6 +105,27 @@ func TestServiceRetriesInventoryAndDeduplicatesProblemEvent(t *testing.T) {
 	}
 	if len(events.events) != 2 || events.events[0].Type != "source_detected" || events.events[1].Type != "inventory_failed" {
 		t.Fatalf("unexpected deduplicated events: %#v", events.events)
+	}
+}
+
+func TestServiceIngestsAfterInventoryAndDoesNotRepeatCompletedAttachment(t *testing.T) {
+	candidate := probe.SourceCandidate{CameraModel: "DJI Osmo Pocket 3", Mountpoint: "/camera", MountReadOnly: true}
+	detector := &fakeDetector{values: []detection{{candidate: candidate, found: true}}}
+	inventor := &fakeInventor{observation: sourceinventory.Observation{Complete: true, EvidenceID: "metadata-sha256:test", Summary: sourceinventory.ObservationSummary{Files: 2, Bytes: 42}}}
+	ingester := &fakeIngester{result: ingest.Result{Verified: 2}}
+	events := &memoryEvents{}
+	service := NewService(detector, inventor, events).WithIngester(ingester)
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if inventor.calls != 1 || ingester.calls != 1 {
+		t.Fatalf("calls inventor=%d ingester=%d", inventor.calls, ingester.calls)
+	}
+	if len(events.events) != 3 || events.events[2].Type != "ingest_complete" || events.events[2].Verified != 2 {
+		t.Fatalf("unexpected events: %#v", events.events)
 	}
 }
 

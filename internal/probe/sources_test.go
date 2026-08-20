@@ -30,11 +30,22 @@ func TestCorrelatesHardwareObservedAction6MassStorage(t *testing.T) {
 	if got.CameraModel != "DJI Osmo Action 6" || got.BlockPath != "/dev/sdd" || got.Mountpoint != "/run/media/operator/OsmoAction" {
 		t.Fatalf("unexpected candidate: %#v", got)
 	}
+	if got.CameraID == "" || strings.Contains(got.CameraID, "camera-serial") {
+		t.Fatalf("unsafe camera identity: %q", got.CameraID)
+	}
 	if got.MountReadOnly {
 		t.Fatalf("errors=remount-ro must not be mistaken for a read-only mount: %#v", got)
 	}
 	if strings.Contains(got.IdentityEvidence, "camera-serial") {
 		t.Fatalf("identity evidence must not expose the camera serial: %q", got.IdentityEvidence)
+	}
+}
+
+func TestCameraIdentitySeparatesPhysicalCamerasWithoutExposingSerial(t *testing.T) {
+	first := cameraID("DJI Osmo Pocket 3", "serial-one")
+	second := cameraID("DJI Osmo Pocket 3", "serial-two")
+	if first == second || strings.Contains(first, "serial-one") || strings.Contains(second, "serial-two") {
+		t.Fatalf("unsafe camera IDs: %q %q", first, second)
 	}
 }
 

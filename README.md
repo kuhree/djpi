@@ -45,6 +45,7 @@ go run ./cmd/djpi inventory --source /path/to/existing/source
 go run ./cmd/djpi inventory --source /path/to/existing/source --json
 go run ./cmd/djpi serve
 go run ./cmd/djpi serve --once
+go run ./cmd/djpi serve --config djpi.example.json
 ```
 
 `djpi probe` performs a read-only inventory of Linux USB descriptors, block
@@ -67,4 +68,15 @@ an unreadable or unsupported entry such as a symlink.
 `djpi serve` is the long-running station process. It polls the same fail-closed
 hardware boundary, emits newline-delimited JSON state events, inventories a
 Source once per attachment, and resets after removal. The current service is
-read-only: it has no Destination delivery or Cleanup implementation yet.
+read-only unless a configuration is supplied. With a local Destination, it
+copies each Source item through a same-directory temporary file, syncs and
+atomically commits it, independently re-hashes the committed bytes, and records
+the evidence in a crash-safe journal. Reconnects skip a Delivery only after
+both Source and Destination content still match the journal. See
+[`djpi.example.json`](djpi.example.json).
+
+Journal Source identities use a one-way digest of the hardware-correlated
+camera serial; raw camera serials are not written into correlated station
+events or journal keys.
+
+Cleanup is not implemented or enabled by any configuration.

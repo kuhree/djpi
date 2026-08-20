@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"git.kuhree.com/kuhree.com/djpi/internal/config"
+	"git.kuhree.com/kuhree.com/djpi/internal/destination"
+	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
+	"git.kuhree.com/kuhree.com/djpi/internal/journal"
 	"git.kuhree.com/kuhree.com/djpi/internal/probe"
 	sourceinventory "git.kuhree.com/kuhree.com/djpi/internal/source"
 	"git.kuhree.com/kuhree.com/djpi/internal/station"
@@ -43,14 +48,46 @@ func run(args []string) int {
 func runServe(args []string) int {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
-	pollInterval := flags.Duration("poll-interval", 2*time.Second, "camera attachment polling interval")
+	pollInterval := flags.Duration("poll-interval", 0, "override camera attachment polling interval")
+	configPath := flags.String("config", "", "JSON station configuration")
 	once := flags.Bool("once", false, "perform one observation cycle and exit")
-	flags.Usage = func() { fmt.Fprintln(os.Stderr, "usage: djpi serve [--poll-interval DURATION] [--once]") }
+	flags.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: djpi serve [--config PATH] [--poll-interval DURATION] [--once]")
+	}
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		flags.Usage()
 		return 2
 	}
+	interval := 2 * time.Second
+	if *pollInterval < 0 {
+		fmt.Fprintln(os.Stderr, "poll interval must be positive")
+		return 2
+	}
+	if *pollInterval > 0 {
+		interval = *pollInterval
+	}
 	service := station.NewService(station.SystemDetector{}, station.SystemInventor{}, station.NewJSONEventSink(os.Stdout))
+	if *configPath != "" {
+		configuration, err := config.Load(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
+			return 1
+		}
+		configuredInterval, err := configuration.ParsedPollInterval()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
+			return 1
+		}
+		if *pollInterval == 0 {
+			interval = configuredInterval
+		}
+		destinations := make([]destination.Destination, 0, len(configuration.Destinations))
+		for _, configured := range configuration.Destinations {
+			destinations = append(destinations, destination.LocalArchive{DestinationName: configured.Name, Root: configured.Path})
+		}
+		engine := &ingest.Engine{Journal: journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")), Destinations: destinations}
+		service.WithIngester(engine)
+	}
 	if *once {
 		if err := service.Step(); err != nil {
 			fmt.Fprintf(os.Stderr, "station cycle: %v\n", err)
@@ -60,7 +97,7 @@ func runServe(args []string) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := service.Run(ctx, *pollInterval); err != nil {
+	if err := service.Run(ctx, interval); err != nil {
 		fmt.Fprintf(os.Stderr, "station service: %v\n", err)
 		return 1
 	}

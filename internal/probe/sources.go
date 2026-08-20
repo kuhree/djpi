@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
@@ -11,6 +12,7 @@ import (
 // camera USB evidence and a Linux storage node. It is not camera enrollment.
 type SourceCandidate struct {
 	CameraModel      string `json:"camera_model"`
+	CameraID         string `json:"camera_id"`
 	IdentityEvidence string `json:"identity_evidence"`
 	USBDevice        string `json:"usb_device"`
 	BlockPath        string `json:"block_path"`
@@ -56,7 +58,7 @@ func correlateSources(usbDevices []USBDevice, blockDevices []BlockDevice, filesy
 				continue
 			}
 			baseCandidate := SourceCandidate{
-				CameraModel: identity.model, IdentityEvidence: identity.evidence,
+				CameraModel: identity.model, CameraID: cameraID(identity.model, usb.Serial), IdentityEvidence: identity.evidence,
 				USBDevice: usb.SysName, BlockPath: block.device.Path, SizeBytes: block.device.Size,
 				Filesystem: block.device.Filesystem, Label: block.device.Label, BlockReadOnly: block.device.ReadOnly,
 			}
@@ -87,6 +89,11 @@ func correlateSources(usbDevices []USBDevice, blockDevices []BlockDevice, filesy
 		return candidates[i].Mountpoint < candidates[j].Mountpoint
 	})
 	return candidates
+}
+
+func cameraID(model, serial string) string {
+	digest := sha256.Sum256([]byte(model + "\x00" + serial))
+	return fmt.Sprintf("camera-sha256:%x", digest[:])
 }
 
 // SingleMountedSource fails closed unless exactly one correlated storage node

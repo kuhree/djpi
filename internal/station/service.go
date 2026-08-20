@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
 	"git.kuhree.com/kuhree.com/djpi/internal/probe"
 	sourceinventory "git.kuhree.com/kuhree.com/djpi/internal/source"
 )
@@ -35,19 +36,31 @@ type Event struct {
 	EvidenceID string    `json:"metadata_evidence_id,omitempty"`
 	Files      int       `json:"files,omitempty"`
 	Bytes      int64     `json:"bytes,omitempty"`
+	Verified   int       `json:"verified,omitempty"`
+	Skipped    int       `json:"skipped,omitempty"`
+	Failed     int       `json:"failed,omitempty"`
 	Message    string    `json:"message,omitempty"`
+}
+
+type Ingester interface {
+	Ingest(context.Context, string, string, sourceinventory.Observation) (ingest.Result, error)
 }
 
 type Service struct {
 	detector Detector
 	inventor Inventor
 	events   EventSink
+	ingester Ingester
 	now      func() time.Time
 
-	currentKey   string
-	completedKey string
-	lastProblem  string
+	currentKey     string
+	completedKey   string
+	inventoriedKey string
+	observation    sourceinventory.Observation
+	lastProblem    string
 }
+
+func (s *Service) WithIngester(ingester Ingester) *Service { s.ingester = ingester; return s }
 
 func NewService(detector Detector, inventor Inventor, events EventSink) *Service {
 	return &Service{detector: detector, inventor: inventor, events: events, now: time.Now}
@@ -55,7 +68,9 @@ func NewService(detector Detector, inventor Inventor, events EventSink) *Service
 
 // Step performs one observation cycle. Detection and inventory failures are
 // emitted as state and retried later; only event-output failures are returned.
-func (s *Service) Step() error {
+func (s *Service) Step() error { return s.StepContext(context.Background()) }
+
+func (s *Service) StepContext(ctx context.Context) error {
 	candidate, found, err := s.detector.Detect()
 	if err != nil {
 		return s.problem("source_blocked", err.Error(), candidate)
@@ -66,13 +81,15 @@ func (s *Service) Step() error {
 			return nil
 		}
 		event := Event{Time: s.now(), Type: "source_removed"}
-		s.currentKey, s.completedKey = "", ""
+		s.currentKey, s.completedKey, s.inventoriedKey = "", "", ""
+		s.observation = sourceinventory.Observation{}
 		return s.events.Emit(event)
 	}
 
 	key := sourceKey(candidate)
 	if key != s.currentKey {
-		s.currentKey, s.completedKey, s.lastProblem = key, "", ""
+		s.currentKey, s.completedKey, s.inventoriedKey, s.lastProblem = key, "", "", ""
+		s.observation = sourceinventory.Observation{}
 		event := candidateEvent(s.now(), "source_detected", candidate)
 		if !candidate.MountReadOnly {
 			event.Message = "source is mounted read-write; djpi station operations remain read-only"
@@ -85,24 +102,42 @@ func (s *Service) Step() error {
 		return nil
 	}
 
-	observation, err := s.inventor.Inventory(candidate.Mountpoint)
-	if err != nil {
-		return s.problem("inventory_failed", err.Error(), candidate)
-	}
-	if !observation.Complete {
-		message := "source inventory is incomplete"
-		if len(observation.Issues) != 0 {
-			message = fmt.Sprintf("%s: %v", message, observation.Issues)
+	if s.inventoriedKey != key {
+		observation, err := s.inventor.Inventory(candidate.Mountpoint)
+		if err != nil {
+			return s.problem("inventory_failed", err.Error(), candidate)
 		}
-		return s.problem("inventory_incomplete", message, candidate)
+		if !observation.Complete {
+			message := "source inventory is incomplete"
+			if len(observation.Issues) != 0 {
+				message = fmt.Sprintf("%s: %v", message, observation.Issues)
+			}
+			return s.problem("inventory_incomplete", message, candidate)
+		}
+		s.lastProblem = ""
+		s.inventoriedKey, s.observation = key, observation
+		event := candidateEvent(s.now(), "inventory_complete", candidate)
+		event.EvidenceID, event.Files, event.Bytes = observation.EvidenceID, observation.Summary.Files, observation.Summary.Bytes
+		if err := s.events.Emit(event); err != nil {
+			return err
+		}
 	}
-
-	s.lastProblem = ""
-	s.completedKey = key
-	event := candidateEvent(s.now(), "inventory_complete", candidate)
-	event.EvidenceID = observation.EvidenceID
-	event.Files = observation.Summary.Files
-	event.Bytes = observation.Summary.Bytes
+	if s.ingester == nil {
+		s.completedKey = key
+		return nil
+	}
+	cameraIdentity := candidate.CameraID
+	if cameraIdentity == "" {
+		cameraIdentity = candidate.CameraModel
+	}
+	result, err := s.ingester.Ingest(ctx, cameraIdentity, candidate.Mountpoint, s.observation)
+	if err != nil {
+		return s.problem("ingest_failed", fmt.Sprintf("%v: %v", err, result.Failures), candidate)
+	}
+	s.lastProblem, s.completedKey = "", key
+	event := candidateEvent(s.now(), "ingest_complete", candidate)
+	event.EvidenceID, event.Files, event.Bytes = s.observation.EvidenceID, s.observation.Summary.Files, s.observation.Summary.Bytes
+	event.Verified, event.Skipped, event.Failed = result.Verified, result.Skipped, result.Failed
 	return s.events.Emit(event)
 }
 
@@ -110,7 +145,7 @@ func (s *Service) Run(ctx context.Context, interval time.Duration) error {
 	if interval <= 0 {
 		return errors.New("poll interval must be positive")
 	}
-	if err := s.Step(); err != nil {
+	if err := s.StepContext(ctx); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(interval)
@@ -120,7 +155,7 @@ func (s *Service) Run(ctx context.Context, interval time.Duration) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := s.Step(); err != nil {
+			if err := s.StepContext(ctx); err != nil {
 				return err
 			}
 		}
