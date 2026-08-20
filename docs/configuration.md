@@ -56,6 +56,13 @@ The archive must not be inside the mounted camera source. Files are stored at
 `<camera-id>/sha256/<digest>/<camera-relative-path>` so two files with the same
 camera path but different contents cannot overwrite each other.
 
+Before staging each file, djpi reads the destination filesystem's available
+capacity and requires the file size plus headroom: the larger of 16 MiB or 1%
+of that file. If capacity cannot be measured or is insufficient, delivery fails
+before any media bytes enter staging and follows the normal journal/backoff
+path. This is a per-file guard, so operators should still size the archive for
+the complete camera plus normal filesystem and retention overhead.
+
 ## S3-compatible archive
 
 ```json

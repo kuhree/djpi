@@ -2,13 +2,60 @@ package destination
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"git.kuhree.com/kuhree.com/djpi/internal/source"
 )
+
+func TestLocalArchiveRefusesInsufficientCapacityBeforeStagingBytes(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/large.MP4", []byte("camera bytes"))
+	archive := LocalArchive{
+		DestinationName: "archive",
+		Root:            archiveRoot,
+		availableBytes:  func(string) (uint64, error) { return uint64(item.SizeBytes), nil },
+	}
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil || !strings.Contains(err.Error(), "insufficient local destination capacity") {
+		t.Fatalf("error = %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(archiveRoot, ".staging"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("staging contains media data: %#v", entries)
+	}
+}
+
+func TestLocalArchiveFailsClosedWhenCapacityCannotBeRead(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
+	archive := LocalArchive{
+		DestinationName: "archive",
+		Root:            archiveRoot,
+		availableBytes:  func(string) (uint64, error) { return 0, errors.New("statfs unavailable") },
+	}
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil || !strings.Contains(err.Error(), "statfs unavailable") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestRequiredLocalCapacityIncludesBoundedHeadroom(t *testing.T) {
+	if got, err := requiredLocalCapacity(1); err != nil || got != minimumLocalHeadroom+1 {
+		t.Fatalf("small capacity = %d, %v", got, err)
+	}
+	if got, err := requiredLocalCapacity(10_000_000_000); err != nil || got != 10_100_000_000 {
+		t.Fatalf("large capacity = %d, %v", got, err)
+	}
+	if _, err := requiredLocalCapacity(-1); err == nil {
+		t.Fatal("expected negative size refusal")
+	}
+}
 
 func TestLocalArchiveDeliversVerifiesAndReusesMatchingFile(t *testing.T) {
 	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()

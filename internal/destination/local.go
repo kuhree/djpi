@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"git.kuhree.com/kuhree.com/djpi/internal/pathguard"
 	"git.kuhree.com/kuhree.com/djpi/internal/source"
@@ -17,7 +19,10 @@ import (
 type LocalArchive struct {
 	DestinationName string
 	Root            string
+	availableBytes  func(string) (uint64, error)
 }
+
+const minimumLocalHeadroom = 16 * 1024 * 1024
 
 func (d LocalArchive) Name() string { return d.DestinationName }
 
@@ -55,6 +60,21 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string,
 	stagingDirectory := filepath.Join(d.Root, ".staging")
 	if err := os.MkdirAll(stagingDirectory, 0o700); err != nil {
 		return Evidence{}, err
+	}
+	availableBytes := d.availableBytes
+	if availableBytes == nil {
+		availableBytes = filesystemAvailableBytes
+	}
+	available, err := availableBytes(stagingDirectory)
+	if err != nil {
+		return Evidence{}, fmt.Errorf("inspect local destination capacity: %w", err)
+	}
+	required, err := requiredLocalCapacity(item.SizeBytes)
+	if err != nil {
+		return Evidence{}, err
+	}
+	if available < required {
+		return Evidence{}, fmt.Errorf("insufficient local destination capacity for %s: %d bytes available, %d required including headroom", item.Path, available, required)
 	}
 	temporary, err := os.CreateTemp(stagingDirectory, ".djpi-*.tmp")
 	if err != nil {
@@ -123,6 +143,33 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string,
 		return Evidence{}, fmt.Errorf("destination verification failed after commit: %s", destinationPath)
 	}
 	return evidence, nil
+}
+
+func filesystemAvailableBytes(path string) (uint64, error) {
+	var statistics syscall.Statfs_t
+	if err := syscall.Statfs(path, &statistics); err != nil {
+		return 0, err
+	}
+	blocks, blockSize := uint64(statistics.Bavail), uint64(statistics.Bsize)
+	if blockSize != 0 && blocks > math.MaxUint64/blockSize {
+		return math.MaxUint64, nil
+	}
+	return blocks * blockSize, nil
+}
+
+func requiredLocalCapacity(size int64) (uint64, error) {
+	if size < 0 {
+		return 0, errors.New("source item has negative size")
+	}
+	mediaBytes := uint64(size)
+	headroom := mediaBytes / 100
+	if headroom < minimumLocalHeadroom {
+		headroom = minimumLocalHeadroom
+	}
+	if mediaBytes > math.MaxUint64-headroom {
+		return 0, errors.New("source item size overflows local capacity calculation")
+	}
+	return mediaBytes + headroom, nil
 }
 
 func (d LocalArchive) Verify(ctx context.Context, evidence Evidence) (bool, error) {

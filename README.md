@@ -82,7 +82,8 @@ Source once per attachment, and resets after removal. The current service is
 read-only unless a configuration is supplied. With configured Destinations, it
 stores immutable objects under a camera and content-digest namespace and
 records the evidence in a crash-safe journal. Local files are atomically
-committed and independently re-hashed. S3-compatible objects use multipart
+committed and independently re-hashed, with a fail-fast destination-capacity
+check before staging. S3-compatible objects use multipart
 upload with SDK transfer checksums plus djpi SHA-256 and size metadata verified
 through `HeadObject`, followed by a streamed `GetObject` SHA-256 read-back.
 Reconnects skip a Delivery only after both Source and Destination evidence

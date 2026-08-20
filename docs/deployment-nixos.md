@@ -105,6 +105,11 @@ system journal. Destination failures include a `retry_at` timestamp and use
 bounded exponential backoff, while systemd still restarts the process after a
 fatal service or listener error.
 
+Local delivery checks free space before staging every item and retains at least
+16 MiB or 1% per-file headroom, whichever is larger. Capacity failures are
+journaled and visible in status; size the configured archive for the whole
+camera rather than relying on this final guard.
+
 An `ingest_complete` event is emitted only after a second complete Source
 inventory matches the delivered snapshot. `source_changed` means the daemon
 adopted newer metadata and will reconcile it; post-ingest inventory failures
