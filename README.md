@@ -90,7 +90,9 @@ still match the journal. See [`djpi.example.json`](djpi.example.json) and
 
 Destination failures are journaled and retried with exponential backoff from
 10 seconds to 5 minutes while the camera remains attached. A successful ingest,
-camera removal, or new attachment resets the backoff.
+camera removal, or new attachment resets the backoff. Each destination call
+also has a configurable finite deadline (six hours by default), so a stalled
+network connection cannot wedge the daemon indefinitely.
 
 When `status_listen` is configured, `djpi serve` exposes a read-only dashboard,
 JSON status, and health checks. The example binds to loopback because this

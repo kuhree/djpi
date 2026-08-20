@@ -29,6 +29,7 @@ input can replace it without changing the module configuration.
     environmentFiles = [ config.age.secrets.djpi-destinations.path ];
     settings = {
       poll_interval = "2s";
+      destination_timeout = "6h";
       status_listen = "127.0.0.1:8787";
       destinations = [
         {

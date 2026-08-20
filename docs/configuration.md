@@ -10,6 +10,7 @@ credentials, and destination-specific fields on the wrong type are rejected.
 {
   "state_directory": "/var/lib/djpi",
   "poll_interval": "2s",
+  "destination_timeout": "6h",
   "status_listen": "127.0.0.1:8787",
   "destinations": [
     {
@@ -28,6 +29,12 @@ the unauthenticated endpoint local; expose it through a trusted VPN or an
 authenticated reverse proxy if remote access is required. Omitting the field
 disables HTTP entirely. There are no action, upload, cleanup, or control routes.
 
+`destination_timeout` bounds each individual delivery or verification call.
+It defaults to six hours when omitted, which accommodates large video objects
+while ensuring a stalled filesystem or network request cannot hold the station
+forever. Cancellation is journaled as a failed delivery and enters the normal
+retry backoff.
+
 The archive must not be inside the mounted camera source. Files are stored at
 `<camera-id>/sha256/<digest>/<camera-relative-path>` so two files with the same
 camera path but different contents cannot overwrite each other.
@@ -38,6 +45,7 @@ camera path but different contents cannot overwrite each other.
 {
   "state_directory": "/var/lib/djpi",
   "poll_interval": "2s",
+  "destination_timeout": "6h",
   "status_listen": "127.0.0.1:8787",
   "destinations": [
     {

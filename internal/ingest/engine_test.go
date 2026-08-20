@@ -2,8 +2,10 @@ package ingest
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,11 +118,39 @@ func TestEngineRejectsIncompleteDestinationEvidence(t *testing.T) {
 	}
 }
 
+func TestEngineBoundsDestinationOperationTime(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "photo"})
+	engine := Engine{
+		Journal:          journal.NewStore(filepath.Join(t.TempDir(), "journal.json")),
+		Destinations:     []destination.Destination{blockingDestination{}},
+		OperationTimeout: 10 * time.Millisecond,
+	}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err == nil || result.Failed != 1 || len(result.Failures) != 1 {
+		t.Fatalf("result = %#v, error = %v", result, err)
+	}
+	if !strings.Contains(result.Failures[0], context.DeadlineExceeded.Error()) {
+		t.Fatalf("failure = %q", result.Failures[0])
+	}
+}
+
 type incompleteEvidenceDestination struct{}
 
 func (incompleteEvidenceDestination) Name() string { return "incomplete" }
 func (incompleteEvidenceDestination) Deliver(context.Context, string, string, source.ObservedItem) (destination.Evidence, error) {
 	return destination.Evidence{SizeBytes: 5, ContentDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}, nil
+}
+
+type blockingDestination struct{}
+
+func (blockingDestination) Name() string { return "blocking" }
+func (blockingDestination) Deliver(ctx context.Context, _ string, _ string, _ source.ObservedItem) (destination.Evidence, error) {
+	<-ctx.Done()
+	return destination.Evidence{}, ctx.Err()
+}
+func (blockingDestination) Verify(context.Context, destination.Evidence) (bool, error) {
+	return false, errors.New("unexpected verify")
 }
 func (incompleteEvidenceDestination) Verify(context.Context, destination.Evidence) (bool, error) {
 	return false, nil

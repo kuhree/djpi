@@ -20,10 +20,13 @@ import (
 )
 
 type Engine struct {
-	Journal      *journal.Store
-	Destinations []destination.Destination
-	Now          func() time.Time
+	Journal          *journal.Store
+	Destinations     []destination.Destination
+	OperationTimeout time.Duration
+	Now              func() time.Time
 }
+
+const defaultOperationTimeout = 6 * time.Hour
 
 type Result struct {
 	SourceID string
@@ -50,6 +53,9 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 	}
 	if len(e.Destinations) == 0 {
 		return result, errors.New("at least one destination is required")
+	}
+	if e.OperationTimeout < 0 {
+		return result, errors.New("destination operation timeout cannot be negative")
 	}
 	destinationNames := make(map[string]struct{}, len(e.Destinations))
 	for _, configured := range e.Destinations {
@@ -96,7 +102,9 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 			itemRecord = record.Items[item.Path]
 			previous, hadPrevious := itemRecord.Deliveries[target.Name()]
 			if hadPrevious && previous.State == "verified" && previous.ContentDigest == itemRecord.ContentDigest {
-				verified, verifyErr := target.Verify(ctx, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest, VerificationDigest: previous.VerificationDigest, Location: previous.Location})
+				operationContext, cancel := e.operationContext(ctx)
+				verified, verifyErr := target.Verify(operationContext, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest, VerificationDigest: previous.VerificationDigest, Location: previous.Location})
+				cancel()
 				if verifyErr == nil && verified {
 					result.Skipped++
 					continue
@@ -107,7 +115,9 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 				}
 			}
 
-			evidence, deliveryErr := target.Deliver(ctx, sourceRoot, camera, item)
+			operationContext, cancel := e.operationContext(ctx)
+			evidence, deliveryErr := target.Deliver(operationContext, sourceRoot, camera, item)
+			cancel()
 			if deliveryErr != nil {
 				result.addFailure(item.Path, target.Name(), deliveryErr)
 				if err := e.recordFailure(result.SourceID, item.Path, target.Name(), deliveryErr); err != nil {
@@ -141,6 +151,14 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 		return result, fmt.Errorf("%d delivery operation(s) failed", result.Failed)
 	}
 	return result, nil
+}
+
+func (e Engine) operationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	timeout := e.OperationTimeout
+	if timeout == 0 {
+		timeout = defaultOperationTimeout
+	}
+	return context.WithTimeout(parent, timeout)
 }
 
 func validateEvidence(item source.ObservedItem, evidence destination.Evidence) error {

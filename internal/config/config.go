@@ -13,10 +13,11 @@ import (
 )
 
 type Config struct {
-	StateDirectory string        `json:"state_directory"`
-	PollInterval   string        `json:"poll_interval,omitempty"`
-	StatusListen   string        `json:"status_listen,omitempty"`
-	Destinations   []Destination `json:"destinations"`
+	StateDirectory     string        `json:"state_directory"`
+	PollInterval       string        `json:"poll_interval,omitempty"`
+	DestinationTimeout string        `json:"destination_timeout,omitempty"`
+	StatusListen       string        `json:"status_listen,omitempty"`
+	Destinations       []Destination `json:"destinations"`
 }
 
 type Destination struct {
@@ -124,7 +125,25 @@ func (c Config) Validate() error {
 		}
 	}
 	_, err := c.ParsedPollInterval()
+	if err != nil {
+		return err
+	}
+	_, err = c.ParsedDestinationTimeout()
 	return err
+}
+
+func (c Config) ParsedDestinationTimeout() (time.Duration, error) {
+	if c.DestinationTimeout == "" {
+		return 6 * time.Hour, nil
+	}
+	timeout, err := time.ParseDuration(c.DestinationTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("invalid destination_timeout: %w", err)
+	}
+	if timeout <= 0 {
+		return 0, errors.New("destination_timeout must be positive")
+	}
+	return timeout, nil
 }
 
 func (c Config) ParsedPollInterval() (time.Duration, error) {

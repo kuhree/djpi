@@ -115,13 +115,18 @@ func runServe(args []string) int {
 		if *pollInterval == 0 {
 			interval = configuredInterval
 		}
+		destinationTimeout, err := configuration.ParsedDestinationTimeout()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
+			return 1
+		}
 		destinations, err := configuredDestinations(context.Background(), configuration, os.LookupEnv)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "configure destinations: %v\n", err)
 			return 1
 		}
 		store := journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json"))
-		engine := &ingest.Engine{Journal: store, Destinations: destinations}
+		engine := &ingest.Engine{Journal: store, Destinations: destinations, OperationTimeout: destinationTimeout}
 		service.WithIngester(engine)
 		statusListen = configuration.StatusListen
 		statusHandler = func() (stationstatus.Report, error) { return buildStatusReport(configuration, store) }
