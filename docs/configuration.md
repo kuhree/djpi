@@ -35,6 +35,10 @@ reports the current item number/path, destination, and phase (`source-check`,
 fields are observational and never substitute for journaled verification. The
 CLI `status` command runs in a separate process and therefore reports durable
 and hardware evidence without claiming to know the daemon's in-memory lifecycle.
+Both views calculate pending deliveries against the current destination list,
+report the most recent successful verification time, and include up to 20
+deterministically sorted journaled failure details. A failed delivery remains
+pending until it independently verifies.
 
 `destination_timeout` bounds each individual delivery or verification call.
 It defaults to six hours when omitted, which accommodates large video objects

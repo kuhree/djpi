@@ -106,9 +106,10 @@ bounded exponential backoff, while systemd still restarts the process after a
 fatal service or listener error.
 
 `djpi status` reports attachment evidence, aggregate verified/failed delivery
-records, and per-snapshot readiness for every currently configured destination.
-Its cleanup state is always explicitly unauthorized because cleanup is not
-implemented.
+records, missing/pending deliveries, the latest verification time, bounded
+item-level failure details, and per-snapshot readiness for every currently
+configured destination. Its cleanup state is always explicitly unauthorized
+because cleanup is not implemented.
 
 The daemon's HTTP status additionally reports the current lifecycle event,
 camera, source snapshot size, current item/destination phase, failure message,

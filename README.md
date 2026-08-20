@@ -99,7 +99,9 @@ JSON status, and health checks. The example binds to loopback because this
 surface intentionally has no application-level authentication or mutation
 routes. The daemon view includes its live lifecycle state, current camera and
 snapshot size, current item/destination/phase, last problem, and scheduled retry
-time while the durable journal continues to supply delivery evidence.
+time while the durable journal continues to supply delivery evidence. Durable
+status also counts missing configured deliveries and shows up to 20 sorted
+item/destination failure details for remote troubleshooting.
 
 Journal Source identities use a one-way digest of the hardware-correlated
 camera serial; raw camera serials are not written into correlated station
