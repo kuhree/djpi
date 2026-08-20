@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"git.kuhree.com/kuhree.com/djpi/internal/config"
 )
@@ -23,6 +25,27 @@ func TestConfiguredDestinationsBuildsLocalAndS3(t *testing.T) {
 	}
 	if len(destinations) != 3 || destinations[0].Name() != "archive" || destinations[1].Name() != "objects" || destinations[2].Name() != "photos" {
 		t.Fatalf("destinations = %#v", destinations)
+	}
+}
+
+func TestRunConcurrentCancelsPeerAndReturnsError(t *testing.T) {
+	wanted := errors.New("listener failed")
+	peerStopped := make(chan struct{})
+	err := runConcurrent(context.Background(),
+		func(context.Context) error { return wanted },
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(peerStopped)
+			return nil
+		},
+	)
+	if !errors.Is(err, wanted) {
+		t.Fatalf("error = %v", err)
+	}
+	select {
+	case <-peerStopped:
+	case <-time.After(time.Second):
+		t.Fatal("peer was not canceled")
 	}
 }
 

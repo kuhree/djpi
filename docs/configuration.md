@@ -10,6 +10,7 @@ credentials, and destination-specific fields on the wrong type are rejected.
 {
   "state_directory": "/var/lib/djpi",
   "poll_interval": "2s",
+  "status_listen": "127.0.0.1:8787",
   "destinations": [
     {
       "name": "local-archive",
@@ -19,6 +20,13 @@ credentials, and destination-specific fields on the wrong type are rejected.
   ]
 }
 ```
+
+`status_listen` is optional. When set, the long-running service exposes a
+read-only operator page at `/`, JSON evidence at `/api/v1/status`, liveness at
+`/healthz`, and readiness at `/readyz`. The recommended loopback address keeps
+the unauthenticated endpoint local; expose it through a trusted VPN or an
+authenticated reverse proxy if remote access is required. Omitting the field
+disables HTTP entirely. There are no action, upload, cleanup, or control routes.
 
 The archive must not be inside the mounted camera source. Files are stored at
 `<camera-id>/sha256/<digest>/<camera-relative-path>` so two files with the same
@@ -30,6 +38,7 @@ camera path but different contents cannot overwrite each other.
 {
   "state_directory": "/var/lib/djpi",
   "poll_interval": "2s",
+  "status_listen": "127.0.0.1:8787",
   "destinations": [
     {
       "name": "object-store",

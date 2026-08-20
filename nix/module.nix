@@ -42,6 +42,7 @@ in
       inherit (json) type;
       default = {
         poll_interval = "2s";
+        status_listen = "127.0.0.1:8787";
         destinations = [
           {
             name = "local-archive";

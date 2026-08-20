@@ -25,6 +25,7 @@ S3-compatible archives, with optional verified Immich catalog delivery. It
 records full SHA-256 evidence and verifies every destination before reporting
 completion. An offline, fixture-backed wireless protocol foundation can decode
 captured media manifests for both cameras, but does not yet connect to a camera.
+The daemon also serves an optional read-only status page and health endpoints.
 djpi never deletes or formats camera storage.
 
 ## First vertical slice
@@ -83,6 +84,11 @@ upload with SDK transfer checksums plus djpi SHA-256 and size metadata verified
 through `HeadObject`. Reconnects skip a Delivery only after both Source and
 Destination evidence still match the journal. See [`djpi.example.json`](djpi.example.json)
 and [`docs/configuration.md`](docs/configuration.md).
+
+When `status_listen` is configured, `djpi serve` exposes a read-only dashboard,
+JSON status, and health checks. The example binds to loopback because this
+surface intentionally has no application-level authentication or mutation
+routes.
 
 Journal Source identities use a one-way digest of the hardware-correlated
 camera serial; raw camera serials are not written into correlated station

@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
+	"strconv"
 	"time"
 )
 
 type Config struct {
 	StateDirectory string        `json:"state_directory"`
 	PollInterval   string        `json:"poll_interval,omitempty"`
+	StatusListen   string        `json:"status_listen,omitempty"`
 	Destinations   []Destination `json:"destinations"`
 }
 
@@ -109,6 +112,16 @@ func (c Config) Validate() error {
 	}
 	if hasImmich && !hasArchive {
 		return errors.New("Immich cannot be the only destination; configure a local or S3-compatible archive")
+	}
+	if c.StatusListen != "" {
+		_, port, err := net.SplitHostPort(c.StatusListen)
+		if err != nil {
+			return fmt.Errorf("invalid status_listen: %w", err)
+		}
+		portNumber, err := strconv.ParseUint(port, 10, 16)
+		if err != nil || portNumber == 0 {
+			return errors.New("status_listen requires a numeric TCP port between 1 and 65535")
+		}
 	}
 	_, err := c.ParsedPollInterval()
 	return err

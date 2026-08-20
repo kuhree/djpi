@@ -9,7 +9,7 @@ import (
 
 func TestLoadValidConfiguration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "djpi.json")
-	data := []byte(`{"state_directory":"/var/lib/djpi","poll_interval":"3s","destinations":[{"name":"archive","type":"local","path":"/srv/archive"}]}`)
+	data := []byte(`{"state_directory":"/var/lib/djpi","poll_interval":"3s","status_listen":"127.0.0.1:8787","destinations":[{"name":"archive","type":"local","path":"/srv/archive"}]}`)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -20,6 +20,9 @@ func TestLoadValidConfiguration(t *testing.T) {
 	interval, err := config.ParsedPollInterval()
 	if err != nil || interval != 3*time.Second {
 		t.Fatalf("interval = %v, %v", interval, err)
+	}
+	if config.StatusListen != "127.0.0.1:8787" {
+		t.Fatalf("status listen = %q", config.StatusListen)
 	}
 }
 
@@ -64,6 +67,9 @@ func TestConfigurationFailsClosed(t *testing.T) {
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "photos", Type: "immich"}}},
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "photos", Type: "immich", ServerURL: "https://photos/api", APIKeyEnv: "KEY", Path: "/wrong"}}},
 		{StateDirectory: "/state", PollInterval: "0s", Destinations: []Destination{{Name: "archive", Type: "local", Path: "/archive"}}},
+		{StateDirectory: "/state", StatusListen: "localhost", Destinations: []Destination{{Name: "archive", Type: "local", Path: "/archive"}}},
+		{StateDirectory: "/state", StatusListen: "127.0.0.1:0", Destinations: []Destination{{Name: "archive", Type: "local", Path: "/archive"}}},
+		{StateDirectory: "/state", StatusListen: "127.0.0.1:http", Destinations: []Destination{{Name: "archive", Type: "local", Path: "/archive"}}},
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "same", Type: "local", Path: "/one"}, {Name: "same", Type: "local", Path: "/two"}}},
 	}
 	for _, value := range tests {

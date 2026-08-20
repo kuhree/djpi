@@ -29,6 +29,7 @@ input can replace it without changing the module configuration.
     environmentFiles = [ config.age.secrets.djpi-destinations.path ];
     settings = {
       poll_interval = "2s";
+      status_listen = "127.0.0.1:8787";
       destinations = [
         {
           name = "archive";
@@ -91,6 +92,8 @@ systemctl status djpi
 journalctl -u djpi -f
 sudo -u djpi djpi status --config /etc/djpi/config.json
 sudo -u djpi djpi status --config /etc/djpi/config.json --json
+curl --fail http://127.0.0.1:8787/healthz
+curl --fail http://127.0.0.1:8787/api/v1/status
 ```
 
 The journal and default local archive live under `/var/lib/djpi`. The service
@@ -102,3 +105,8 @@ system journal.
 records, and per-snapshot readiness for every currently configured destination.
 Its cleanup state is always explicitly unauthorized because cleanup is not
 implemented.
+
+The module enables the read-only HTTP status page on loopback by default. It
+does not open a firewall port. Keep it on loopback and use a trusted VPN or an
+authenticated reverse proxy for remote access; binding a non-loopback address
+directly exposes operational metadata without application-level authentication.

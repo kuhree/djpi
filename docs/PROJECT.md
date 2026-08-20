@@ -36,8 +36,9 @@ but a generic camera-plugin framework is not an MVP goal.
   idempotent object naming.
 - **Immich destination**: upload through Immich's supported API without making
   Immich's catalog state the only preserved copy.
-- **Operator surface**: structured service events plus human and JSON status
-  commands; a small local web UI and notifications remain later work.
+- **Operator surface**: structured service events, human and JSON status
+  commands, and an optional read-only local web UI with health checks;
+  notifications remain later work.
 
 ## Runtime model
 

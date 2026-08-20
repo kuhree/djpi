@@ -14,6 +14,7 @@ import (
 	"git.kuhree.com/kuhree.com/djpi/internal/destination"
 	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
 	"git.kuhree.com/kuhree.com/djpi/internal/journal"
+	"git.kuhree.com/kuhree.com/djpi/internal/operatorhttp"
 	"git.kuhree.com/kuhree.com/djpi/internal/probe"
 	sourceinventory "git.kuhree.com/kuhree.com/djpi/internal/source"
 	"git.kuhree.com/kuhree.com/djpi/internal/station"
@@ -64,17 +65,11 @@ func runStatus(args []string) int {
 		fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
 		return 1
 	}
-	state, err := journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")).Load()
+	report, err := buildStatusReport(configuration, journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "load journal: %v\n", err)
+		fmt.Fprintf(os.Stderr, "build status: %v\n", err)
 		return 1
 	}
-	deviceReport := probe.NewSystemCollector().Collect()
-	destinationNames := make([]string, 0, len(configuration.Destinations))
-	for _, configured := range configuration.Destinations {
-		destinationNames = append(destinationNames, configured.Name)
-	}
-	report := stationstatus.Build(time.Now(), deviceReport.SourceCandidates, state, destinationNames, deviceReport.Warnings)
 	if err := stationstatus.Write(os.Stdout, report, *jsonOutput); err != nil {
 		fmt.Fprintf(os.Stderr, "write status: %v\n", err)
 		return 1
@@ -104,6 +99,8 @@ func runServe(args []string) int {
 		interval = *pollInterval
 	}
 	service := station.NewService(station.SystemDetector{}, station.SystemInventor{}, station.NewJSONEventSink(os.Stdout))
+	statusListen := ""
+	var statusHandler operatorhttp.ReportProvider
 	if *configPath != "" {
 		configuration, err := config.Load(*configPath)
 		if err != nil {
@@ -123,8 +120,11 @@ func runServe(args []string) int {
 			fmt.Fprintf(os.Stderr, "configure destinations: %v\n", err)
 			return 1
 		}
-		engine := &ingest.Engine{Journal: journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")), Destinations: destinations}
+		store := journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json"))
+		engine := &ingest.Engine{Journal: store, Destinations: destinations}
 		service.WithIngester(engine)
+		statusListen = configuration.StatusListen
+		statusHandler = func() (stationstatus.Report, error) { return buildStatusReport(configuration, store) }
 	}
 	if *once {
 		if err := service.Step(); err != nil {
@@ -135,11 +135,53 @@ func runServe(args []string) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := service.Run(ctx, interval); err != nil {
+	runners := []func(context.Context) error{
+		func(runContext context.Context) error { return service.Run(runContext, interval) },
+	}
+	if statusListen != "" {
+		handler := operatorhttp.Handler(statusHandler)
+		runners = append(runners, func(runContext context.Context) error {
+			return operatorhttp.ListenAndServe(runContext, statusListen, handler)
+		})
+	}
+	if err := runConcurrent(ctx, runners...); err != nil {
 		fmt.Fprintf(os.Stderr, "station service: %v\n", err)
 		return 1
 	}
 	return 0
+}
+
+func buildStatusReport(configuration config.Config, store *journal.Store) (stationstatus.Report, error) {
+	state, err := store.Load()
+	if err != nil {
+		return stationstatus.Report{}, fmt.Errorf("load journal: %w", err)
+	}
+	deviceReport := probe.NewSystemCollector().Collect()
+	destinationNames := make([]string, 0, len(configuration.Destinations))
+	for _, configured := range configuration.Destinations {
+		destinationNames = append(destinationNames, configured.Name)
+	}
+	return stationstatus.Build(time.Now(), deviceReport.SourceCandidates, state, destinationNames, deviceReport.Warnings), nil
+}
+
+func runConcurrent(ctx context.Context, runners ...func(context.Context) error) error {
+	if len(runners) == 0 {
+		return nil
+	}
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(chan error, len(runners))
+	for _, runner := range runners {
+		go func() { results <- runner(runContext) }()
+	}
+	var firstError error
+	for range runners {
+		if err := <-results; err != nil && firstError == nil {
+			firstError = err
+		}
+		cancel()
+	}
+	return firstError
 }
 
 func configuredDestinations(ctx context.Context, configuration config.Config, lookupEnv func(string) (string, bool)) ([]destination.Destination, error) {
