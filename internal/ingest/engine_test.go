@@ -135,6 +135,41 @@ func TestEngineBoundsDestinationOperationTime(t *testing.T) {
 	}
 }
 
+func TestEngineReportsObservationalItemProgress(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "photo"})
+	var updates []Progress
+	engine := Engine{
+		Journal:      journal.NewStore(filepath.Join(t.TempDir(), "journal.json")),
+		Destinations: []destination.Destination{destination.LocalArchive{DestinationName: "archive", Root: archiveRoot}},
+		Progress:     func(update Progress) { updates = append(updates, update) },
+	}
+	if _, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation); err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 2 || updates[0].Phase != "delivering" || updates[1].Phase != "verified" {
+		t.Fatalf("first updates = %#v", updates)
+	}
+	for _, update := range updates {
+		if update.ItemPath != "DCIM/one.JPG" || update.ItemIndex != 1 || update.ItemTotal != 1 || update.Destination != "archive" || update.SourceID == "" {
+			t.Fatalf("incomplete progress = %#v", update)
+		}
+	}
+	updates = nil
+	if _, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation); err != nil {
+		t.Fatal(err)
+	}
+	wantPhases := []string{"source-check", "verifying", "skipped"}
+	if len(updates) != len(wantPhases) {
+		t.Fatalf("resume updates = %#v", updates)
+	}
+	for index, wanted := range wantPhases {
+		if updates[index].Phase != wanted {
+			t.Fatalf("resume update %d = %#v, want %s", index, updates[index], wanted)
+		}
+	}
+}
+
 type incompleteEvidenceDestination struct{}
 
 func (incompleteEvidenceDestination) Name() string { return "incomplete" }

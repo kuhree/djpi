@@ -4,26 +4,47 @@ import (
 	"sync"
 	"time"
 
+	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
 	"git.kuhree.com/kuhree.com/djpi/internal/station"
 )
 
 // RuntimeStatus is the daemon's current in-memory lifecycle state. Durable
 // delivery evidence remains in Journal; this view is for live operations.
 type RuntimeStatus struct {
-	State      string     `json:"state"`
-	StartedAt  time.Time  `json:"started_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	LastEvent  string     `json:"last_event,omitempty"`
-	Camera     string     `json:"camera,omitempty"`
-	SourcePath string     `json:"source_path,omitempty"`
-	EvidenceID string     `json:"metadata_evidence_id,omitempty"`
-	Files      int        `json:"files,omitempty"`
-	Bytes      int64      `json:"bytes,omitempty"`
-	Verified   int        `json:"verified,omitempty"`
-	Skipped    int        `json:"skipped,omitempty"`
-	Failed     int        `json:"failed,omitempty"`
-	RetryAt    *time.Time `json:"retry_at,omitempty"`
-	Message    string     `json:"message,omitempty"`
+	State       string     `json:"state"`
+	StartedAt   time.Time  `json:"started_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	LastEvent   string     `json:"last_event,omitempty"`
+	Camera      string     `json:"camera,omitempty"`
+	SourcePath  string     `json:"source_path,omitempty"`
+	EvidenceID  string     `json:"metadata_evidence_id,omitempty"`
+	Files       int        `json:"files,omitempty"`
+	Bytes       int64      `json:"bytes,omitempty"`
+	Verified    int        `json:"verified,omitempty"`
+	Skipped     int        `json:"skipped,omitempty"`
+	Failed      int        `json:"failed,omitempty"`
+	RetryAt     *time.Time `json:"retry_at,omitempty"`
+	Message     string     `json:"message,omitempty"`
+	ItemPath    string     `json:"item_path,omitempty"`
+	ItemIndex   int        `json:"item_index,omitempty"`
+	ItemTotal   int        `json:"item_total,omitempty"`
+	Destination string     `json:"destination,omitempty"`
+	Phase       string     `json:"phase,omitempty"`
+}
+
+// TrackProgress updates only the live operation detail. The last lifecycle
+// event and all durable journal evidence remain unchanged.
+func (tracker *RuntimeTracker) TrackProgress(progress ingest.Progress) {
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	tracker.state.State = "ingesting"
+	tracker.state.Camera = progress.Camera
+	tracker.state.ItemPath = progress.ItemPath
+	tracker.state.ItemIndex = progress.ItemIndex
+	tracker.state.ItemTotal = progress.ItemTotal
+	tracker.state.Destination = progress.Destination
+	tracker.state.Phase = progress.Phase
+	tracker.state.UpdatedAt = time.Now().UTC()
 }
 
 // RuntimeTracker implements station.EventSink and is safe for concurrent HTTP

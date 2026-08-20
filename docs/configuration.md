@@ -29,9 +29,12 @@ the unauthenticated endpoint local; expose it through a trusted VPN or an
 authenticated reverse proxy if remote access is required. Omitting the field
 disables HTTP entirely. There are no action, upload, cleanup, or control routes.
 The API combines live daemon lifecycle state (`idle`, `ingesting`, `retrying`,
-`blocked`, or `complete`) with the durable ingest journal. The CLI `status`
-command runs in a separate process and therefore reports durable and hardware
-evidence without claiming to know the daemon's in-memory lifecycle.
+`blocked`, or `complete`) with the durable ingest journal. During ingest it also
+reports the current item number/path, destination, and phase (`source-check`,
+`delivering`, `verifying`, `verified`, `skipped`, or `failed`). These progress
+fields are observational and never substitute for journaled verification. The
+CLI `status` command runs in a separate process and therefore reports durable
+and hardware evidence without claiming to know the daemon's in-memory lifecycle.
 
 `destination_timeout` bounds each individual delivery or verification call.
 It defaults to six hours when omitted, which accommodates large video objects

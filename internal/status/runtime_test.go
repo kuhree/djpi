@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
 	"git.kuhree.com/kuhree.com/djpi/internal/station"
 )
 
@@ -26,6 +27,18 @@ func TestRuntimeTrackerMapsLifecycleAndCopiesRetryDeadline(t *testing.T) {
 	retry = time.Unix(99, 0)
 	if snapshot.RetryAt.Equal(retry) {
 		t.Fatal("tracker retained caller-owned retry pointer")
+	}
+}
+
+func TestRuntimeTrackerAddsProgressWithoutReplacingLifecycleEvidence(t *testing.T) {
+	tracker := NewRuntimeTracker(time.Unix(1, 0))
+	if err := tracker.Emit(station.Event{Time: time.Unix(2, 0), Type: "ingest_started", EvidenceID: "metadata:test", Files: 2}); err != nil {
+		t.Fatal(err)
+	}
+	tracker.TrackProgress(ingest.Progress{Camera: "DJI Osmo Action 6", ItemPath: "DCIM/clip.MP4", ItemIndex: 1, ItemTotal: 2, Destination: "archive", Phase: "delivering"})
+	snapshot := tracker.Snapshot()
+	if snapshot.State != "ingesting" || snapshot.LastEvent != "ingest_started" || snapshot.EvidenceID != "metadata:test" || snapshot.ItemPath != "DCIM/clip.MP4" || snapshot.ItemIndex != 1 || snapshot.ItemTotal != 2 || snapshot.Destination != "archive" || snapshot.Phase != "delivering" {
+		t.Fatalf("snapshot = %#v", snapshot)
 	}
 }
 

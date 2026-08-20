@@ -128,7 +128,7 @@ func runServe(args []string) int {
 			return 1
 		}
 		store := journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json"))
-		engine := &ingest.Engine{Journal: store, Destinations: destinations, OperationTimeout: destinationTimeout}
+		engine := &ingest.Engine{Journal: store, Destinations: destinations, OperationTimeout: destinationTimeout, Progress: runtimeTracker.TrackProgress}
 		service.WithIngester(engine)
 		statusListen = configuration.StatusListen
 		statusHandler = func() (stationstatus.Report, error) {

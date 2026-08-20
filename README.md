@@ -98,8 +98,8 @@ When `status_listen` is configured, `djpi serve` exposes a read-only dashboard,
 JSON status, and health checks. The example binds to loopback because this
 surface intentionally has no application-level authentication or mutation
 routes. The daemon view includes its live lifecycle state, current camera and
-snapshot size, last problem, and scheduled retry time while the durable journal
-continues to supply delivery evidence.
+snapshot size, current item/destination/phase, last problem, and scheduled retry
+time while the durable journal continues to supply delivery evidence.
 
 Journal Source identities use a one-way digest of the hardware-correlated
 camera serial; raw camera serials are not written into correlated station
