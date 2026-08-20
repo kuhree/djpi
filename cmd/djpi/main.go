@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"git.kuhree.com/kuhree.com/djpi/internal/audit"
 	"git.kuhree.com/kuhree.com/djpi/internal/config"
 	"git.kuhree.com/kuhree.com/djpi/internal/destination"
 	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
@@ -44,10 +45,56 @@ func run(args []string) int {
 	if len(args) >= 1 && args[0] == "status" {
 		return runStatus(args[1:])
 	}
+	if len(args) >= 1 && args[0] == "audit" {
+		return runAudit(args[1:])
+	}
 
 	fmt.Fprintln(os.Stderr, "djpi is not configured yet")
-	fmt.Fprintln(os.Stderr, "usage: djpi <version|probe|inventory|serve|status>")
+	fmt.Fprintln(os.Stderr, "usage: djpi <version|probe|inventory|serve|status|audit>")
 	return 2
+}
+
+func runAudit(args []string) int {
+	flags := flag.NewFlagSet("audit", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	configPath := flags.String("config", "", "JSON station configuration")
+	jsonOutput := flags.Bool("json", false, "write machine-readable JSON")
+	flags.Usage = func() { fmt.Fprintln(os.Stderr, "usage: djpi audit --config PATH [--json]") }
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *configPath == "" {
+		flags.Usage()
+		return 2
+	}
+	configuration, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
+		return 1
+	}
+	timeout, err := configuration.ParsedDestinationTimeout()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load configuration: %v\n", err)
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	destinations, err := configuredDestinations(ctx, configuration, os.LookupEnv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "configure destinations: %v\n", err)
+		return 1
+	}
+	state, err := journal.NewStore(filepath.Join(configuration.StateDirectory, "journal.json")).Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load journal: %v\n", err)
+		return 1
+	}
+	report := audit.Run(ctx, state, destinations, timeout, time.Now())
+	if err := audit.Write(os.Stdout, report, *jsonOutput); err != nil {
+		fmt.Fprintf(os.Stderr, "write audit report: %v\n", err)
+		return 1
+	}
+	if !report.Clean() {
+		return 1
+	}
+	return 0
 }
 
 func runStatus(args []string) int {

@@ -99,9 +99,14 @@ systemctl status djpi
 journalctl -u djpi -f
 sudo -u djpi djpi status --config /etc/djpi/config.json
 sudo -u djpi djpi status --config /etc/djpi/config.json --json
+sudo -u djpi djpi audit --config /etc/djpi/config.json
 curl --fail http://127.0.0.1:8787/healthz
 curl --fail http://127.0.0.1:8787/api/v1/status
 ```
+
+The audit is read-only but can be I/O intensive because it independently reads
+every configured copy. Run it when archive and network load are acceptable. Use
+the same service environment when S3 or Immich credentials are configured.
 
 The journal and default local archive live under `/var/lib/djpi`. The service
 restarts after failures, rechecks durable destination evidence after a process

@@ -144,3 +144,16 @@ stored in the journal; the API key is not.
 
 There is deliberately no cleanup setting. Delivery verification and camera
 cleanup authorization are separate safety mechanisms.
+
+## Independent destination audit
+
+Run `djpi audit --config /etc/djpi.json` to re-check durable deliveries while
+the camera is absent. The audit evaluates every journaled item against every
+currently configured destination. It does not read camera storage or modify the
+journal. `--json` emits machine-readable output; either form exits nonzero for
+pending delivery evidence, invalid journal evidence, destination errors, or byte
+mismatches. Each verification uses `destination_timeout` independently.
+
+An empty journal has nothing to audit and succeeds with zero expected items.
+Removing a destination from configuration removes it from the audit set; adding
+one makes every older item pending until normal ingest delivers and verifies it.

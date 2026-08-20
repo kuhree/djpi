@@ -61,6 +61,8 @@ go run ./cmd/djpi serve --once
 go run ./cmd/djpi serve --config djpi.example.json
 go run ./cmd/djpi status --config djpi.example.json
 go run ./cmd/djpi status --config djpi.example.json --json
+go run ./cmd/djpi audit --config djpi.example.json
+go run ./cmd/djpi audit --config djpi.example.json --json
 ```
 
 `djpi probe` performs a read-only inventory of Linux USB descriptors, block
@@ -113,6 +115,14 @@ snapshot size, current item/destination/phase, last problem, and scheduled retry
 time while the durable journal continues to supply delivery evidence. Durable
 status also counts missing configured deliveries and shows up to 20 sorted
 item/destination failure details for remote troubleshooting.
+
+`djpi audit --config ...` independently re-verifies every journaled item at
+every currently configured destination without requiring an attached camera.
+It reads but never rewrites the journal, emits deterministic human or JSON
+results, and exits nonzero if delivery evidence is missing, inconsistent, no
+longer reachable, or no longer matches the stored bytes. Local archives are
+re-hashed; S3 objects are streamed back through SHA-256; Immich assets are
+checked through its live asset API.
 
 Journal Source identities use a one-way digest of the hardware-correlated
 camera serial; raw camera serials are not written into correlated station

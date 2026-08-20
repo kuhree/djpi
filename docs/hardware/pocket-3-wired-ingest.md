@@ -64,6 +64,21 @@ The second pass re-hashed the Source and every committed destination file before
 skipping delivery. It left the archive at the same 9 files and byte count, left
 staging empty, and did not replace the original journal verification times.
 
+## Independent archive audit
+
+After adding the read-only `djpi audit` command, a development build audited the
+retained archive without the Source being part of the operation. It independently
+re-hashed all 9 configured local deliveries and reported:
+
+```text
+expected=9 verified=9 pending=0 failed=0
+```
+
+The journal SHA-256 was
+`beb5c9ff8226fe1cf2ba623e949e6b8649ff371da95ea7157d6003e8312d2355`
+both before and after the audit, confirming the audit did not rewrite its
+evidence.
+
 ## Remaining proof
 
 - Repeat through the NixOS module's read-only udev/systemd automount on the
