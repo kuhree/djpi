@@ -92,8 +92,10 @@ and [Pocket 3](hardware/pocket-3-usb.md), plus the Pocket 3
   Cleanup authorization or changing the source.
 
 The complete local archive path and unchanged-snapshot reconnect idempotence
-are hardware-verified on `nixtop` with a Pocket 3. Raspberry Pi read-only
-automount and interrupted-transfer recovery remain to be exercised on hardware.
+are hardware-verified on `nixtop` with a Pocket 3. Abrupt process termination,
+stale staging reclamation, and verified resume are also hardware-verified.
+Raspberry Pi read-only automount and a physical mid-transfer disconnect remain
+to be exercised on hardware.
 
 ### Phase 2: destinations and controlled cleanup
 

@@ -82,6 +82,68 @@ func TestLocalArchiveDeliversVerifiesAndReusesMatchingFile(t *testing.T) {
 	}
 }
 
+func TestLocalArchiveReclaimsOnlyRegularDjpiStagingFiles(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
+	staging := filepath.Join(archiveRoot, ".staging")
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(staging, ".djpi-crashed.tmp")
+	unrelated := filepath.Join(staging, "operator-note")
+	if err := os.WriteFile(stale, []byte("partial media"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(unrelated, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	archive := LocalArchive{DestinationName: "archive", Root: archiveRoot}
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale temporary file remains: %v", err)
+	}
+	if content, err := os.ReadFile(unrelated); err != nil || string(content) != "keep" {
+		t.Fatalf("unrelated staging entry changed: %q, %v", content, err)
+	}
+}
+
+func TestLocalArchiveRefusesNonRegularStaleEntry(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
+	staleDirectory := filepath.Join(archiveRoot, ".staging", ".djpi-unexpected.tmp")
+	if err := os.MkdirAll(staleDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	archive := LocalArchive{DestinationName: "archive", Root: archiveRoot}
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil || !strings.Contains(err.Error(), "refuse non-regular stale staging entry") {
+		t.Fatalf("error = %v", err)
+	}
+	if info, err := os.Stat(staleDirectory); err != nil || !info.IsDir() {
+		t.Fatalf("unexpected entry was changed: %v", err)
+	}
+}
+
+func TestLocalArchiveLockWaitHonorsContext(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
+	if err := os.MkdirAll(filepath.Join(archiveRoot, ".staging"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := acquireLocalArchiveLock(context.Background(), archiveRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer releaseLocalArchiveLock(lock)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	archive := LocalArchive{DestinationName: "archive", Root: archiveRoot}
+	if _, err := archive.Deliver(ctx, sourceRoot, "camera", item); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestLocalArchiveRefusesConflictAndChangedSource(t *testing.T) {
 	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
 	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("source"))

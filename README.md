@@ -23,7 +23,9 @@ and Pocket 3 USB mass-storage presentations, inventories an already mounted
 camera, and durably delivers every regular file to one or more local or
 S3-compatible archives, with optional verified Immich catalog delivery. It
 records full SHA-256 evidence and verifies every destination before reporting
-completion. An offline, fixture-backed wireless protocol foundation can decode
+completion. Local archive staging is process-locked and safely reclaims djpi's
+own incomplete temp files after abrupt termination. An offline, fixture-backed
+wireless protocol foundation can decode
 captured media manifests for both cameras, but does not yet connect to a camera.
 An offline Action 6 R SDK codec validates status frames and constructs the
 official status subscription, while intentionally providing no BLE transport.

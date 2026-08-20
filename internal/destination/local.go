@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"git.kuhree.com/kuhree.com/djpi/internal/pathguard"
 	"git.kuhree.com/kuhree.com/djpi/internal/source"
@@ -59,6 +60,14 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string,
 	}
 	stagingDirectory := filepath.Join(d.Root, ".staging")
 	if err := os.MkdirAll(stagingDirectory, 0o700); err != nil {
+		return Evidence{}, err
+	}
+	archiveLock, err := acquireLocalArchiveLock(ctx, d.Root)
+	if err != nil {
+		return Evidence{}, err
+	}
+	defer releaseLocalArchiveLock(archiveLock)
+	if err := reclaimLocalStaging(stagingDirectory); err != nil {
 		return Evidence{}, err
 	}
 	availableBytes := d.availableBytes
@@ -155,6 +164,65 @@ func filesystemAvailableBytes(path string) (uint64, error) {
 		return math.MaxUint64, nil
 	}
 	return blocks * blockSize, nil
+}
+
+func acquireLocalArchiveLock(ctx context.Context, root string) (*os.File, error) {
+	lock, err := os.OpenFile(filepath.Join(root, ".djpi.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open local destination lock: %w", err)
+	}
+	retry := time.NewTicker(100 * time.Millisecond)
+	defer retry.Stop()
+	for {
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return lock, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+			_ = lock.Close()
+			return nil, fmt.Errorf("lock local destination: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			_ = lock.Close()
+			return nil, ctx.Err()
+		case <-retry.C:
+		}
+	}
+}
+
+func releaseLocalArchiveLock(lock *os.File) {
+	_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	_ = lock.Close()
+}
+
+func reclaimLocalStaging(directory string) error {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf("inspect local destination staging: %w", err)
+	}
+	removed := false
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, ".djpi-") || !strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("inspect stale staging entry %s: %w", name, err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("refuse non-regular stale staging entry %s", name)
+		}
+		if err := os.Remove(filepath.Join(directory, name)); err != nil {
+			return fmt.Errorf("remove stale staging entry %s: %w", name, err)
+		}
+		removed = true
+	}
+	if removed {
+		return syncDirectory(directory)
+	}
+	return nil
 }
 
 func requiredLocalCapacity(size int64) (uint64, error) {

@@ -63,6 +63,13 @@ before any media bytes enter staging and follows the normal journal/backoff
 path. This is a per-file guard, so operators should still size the archive for
 the complete camera plus normal filesystem and retention overhead.
 
+Each local archive uses an advisory `.djpi.lock` while delivering. After it
+holds that lock, djpi removes only regular `.staging/.djpi-*.tmp` files created
+by an earlier interrupted djpi process, then synchronizes the staging
+directory. It refuses unexpected non-regular entries and never sweeps other
+names. Committed content-addressed objects and camera storage are outside this
+reclamation boundary.
+
 ## S3-compatible archive
 
 ```json

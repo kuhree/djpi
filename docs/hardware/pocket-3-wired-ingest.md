@@ -79,12 +79,39 @@ The journal SHA-256 was
 both before and after the audit, confirming the audit did not rewrite its
 evidence.
 
+## Abrupt termination and resume
+
+A second fresh archive was started against the same snapshot and the djpi
+process was sent `SIGKILL` during delivery. At termination, one 20,769,397-byte
+object was already committed and journaled, and the next item had left an
+83,886,080-byte `.staging/.djpi-*.tmp` fragment. This models abrupt process or
+host loss rather than graceful cancellation.
+
+On restart, djpi acquired its local archive lock, removed only the stale private
+temp, independently reverified and skipped the committed object, and delivered
+the other eight items. Completion reported:
+
+```text
+files=9 bytes=8566818586 verified=8 skipped=1 failed=0
+```
+
+Independent inspection found an empty staging directory and exactly 9 committed
+files totaling 8,566,818,586 bytes. A subsequent destination audit verified all
+9. Its journal SHA-256 remained
+`d41b5870bdb7782469e06d2264e7717fc4de264b25ddd5ad4f9c35fa21cf2efe`
+before and after that audit. The validation paths remain on `nixtop`:
+
+```text
+/home/kuhree/djpi-interruption-validation-archive
+/home/kuhree/.local/state/djpi-interruption-validation
+```
+
 ## Remaining proof
 
 - Repeat through the NixOS module's read-only udev/systemd automount on the
   actual Raspberry Pi.
-- Interrupt a large transfer by process termination and camera disconnect,
-  then prove staging cleanup and resume behavior on hardware.
+- Interrupt a large transfer by physically disconnecting the camera, then prove
+  the same staging cleanup and resume behavior.
 - Validate configured S3-compatible and Immich destinations with narrowly
   scoped real credentials.
 - Repeat with the Action 6 when it is available.
