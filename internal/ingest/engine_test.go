@@ -103,6 +103,29 @@ func TestEngineRefusesJournalInsideSourceBeforeWriting(t *testing.T) {
 	}
 }
 
+func TestEngineRejectsIncompleteDestinationEvidence(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "photo"})
+	engine := Engine{
+		Journal:      journal.NewStore(filepath.Join(t.TempDir(), "journal.json")),
+		Destinations: []destination.Destination{incompleteEvidenceDestination{}},
+	}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err == nil || result.Failed != 1 {
+		t.Fatalf("result = %#v, error = %v", result, err)
+	}
+}
+
+type incompleteEvidenceDestination struct{}
+
+func (incompleteEvidenceDestination) Name() string { return "incomplete" }
+func (incompleteEvidenceDestination) Deliver(context.Context, string, string, source.ObservedItem) (destination.Evidence, error) {
+	return destination.Evidence{SizeBytes: 5, ContentDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}, nil
+}
+func (incompleteEvidenceDestination) Verify(context.Context, destination.Evidence) (bool, error) {
+	return false, nil
+}
+
 func ingestFixture(t *testing.T, root string, files map[string]string) source.Observation {
 	t.Helper()
 	modified := time.Unix(1_700_000_000, 0)

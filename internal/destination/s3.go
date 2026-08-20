@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -94,7 +95,7 @@ func (d *S3Archive) Deliver(ctx context.Context, sourceRoot, namespace string, i
 	if err != nil {
 		return Evidence{}, err
 	}
-	evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest}
+	evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest}
 	evidence.Location = s3ObjectKey(d.options.Prefix, contentLocation(namespace, digest, item.Path))
 
 	exists, matches, err := d.headMatches(ctx, evidence)
@@ -173,6 +174,12 @@ func (d *S3Archive) headMatches(ctx context.Context, evidence Evidence) (bool, b
 func validateS3Options(options S3Options) error {
 	if options.DestinationName == "" || options.Region == "" || options.Bucket == "" {
 		return errors.New("S3 destination name, region, and bucket are required")
+	}
+	if options.Endpoint != "" {
+		parsed, err := url.Parse(options.Endpoint)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return errors.New("S3 endpoint must be an HTTP(S) URL without credentials, query, or fragment")
+		}
 	}
 	return nil
 }

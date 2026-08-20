@@ -38,6 +38,21 @@ func TestLoadValidS3Configuration(t *testing.T) {
 	}
 }
 
+func TestLoadValidImmichConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "djpi.json")
+	data := []byte(`{"state_directory":"/var/lib/djpi","destinations":[{"name":"archive","type":"local","path":"/srv/archive"},{"name":"photos","type":"immich","server_url":"https://photos.example/api","api_key_env":"DJPI_IMMICH_API_KEY"}]}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	value, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := value.Destinations[1]; got.ServerURL != "https://photos.example/api" || got.APIKeyEnv != "DJPI_IMMICH_API_KEY" {
+		t.Fatalf("destination = %#v", got)
+	}
+}
+
 func TestConfigurationFailsClosed(t *testing.T) {
 	tests := []Config{
 		{},
@@ -46,6 +61,8 @@ func TestConfigurationFailsClosed(t *testing.T) {
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "remote", Type: "s3", Region: "r", Bucket: "b", AccessKeyEnv: "ACCESS"}}},
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "remote", Type: "s3", Region: "r", Bucket: "b", Path: "/wrong"}}},
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "archive", Type: "local", Path: "/archive", Bucket: "wrong"}}},
+		{StateDirectory: "/state", Destinations: []Destination{{Name: "photos", Type: "immich"}}},
+		{StateDirectory: "/state", Destinations: []Destination{{Name: "photos", Type: "immich", ServerURL: "https://photos/api", APIKeyEnv: "KEY", Path: "/wrong"}}},
 		{StateDirectory: "/state", PollInterval: "0s", Destinations: []Destination{{Name: "archive", Type: "local", Path: "/archive"}}},
 		{StateDirectory: "/state", Destinations: []Destination{{Name: "same", Type: "local", Path: "/one"}, {Name: "same", Type: "local", Path: "/two"}}},
 	}

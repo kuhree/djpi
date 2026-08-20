@@ -145,6 +145,20 @@ func configuredDestinations(ctx context.Context, configuration config.Config, lo
 				return nil, fmt.Errorf("destination %q: %w", configured.Name, err)
 			}
 			result = append(result, archive)
+		case "immich":
+			apiKey, ok := lookupEnv(configured.APIKeyEnv)
+			if !ok || apiKey == "" {
+				return nil, fmt.Errorf("destination %q requires non-empty environment variable %s", configured.Name, configured.APIKeyEnv)
+			}
+			archive, err := destination.NewImmichArchive(destination.ImmichOptions{
+				DestinationName: configured.Name,
+				ServerURL:       configured.ServerURL,
+				APIKey:          apiKey,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("destination %q: %w", configured.Name, err)
+			}
+			result = append(result, archive)
 		default:
 			return nil, fmt.Errorf("destination %q has unsupported type %q", configured.Name, configured.Type)
 		}

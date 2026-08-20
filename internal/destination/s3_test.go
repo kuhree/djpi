@@ -118,6 +118,13 @@ func TestS3ArchiveRejectsUnsafeSourcePathAndNamespace(t *testing.T) {
 	}
 }
 
+func TestS3OptionsRejectCredentialBearingEndpoint(t *testing.T) {
+	err := validateS3Options(S3Options{DestinationName: "backup", Region: "r", Bucket: "b", Endpoint: "https://user:secret@objects.example"})
+	if err == nil {
+		t.Fatal("expected unsafe endpoint refusal")
+	}
+}
+
 func fixtureUnsafeItem(path string) source.ObservedItem {
 	return source.ObservedItem{Path: path, SizeBytes: 1}
 }

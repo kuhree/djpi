@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const CurrentVersion = 2
+const CurrentVersion = 3
 
 type State struct {
 	Version int                     `json:"version"`
@@ -32,12 +32,13 @@ type ItemRecord struct {
 }
 
 type DeliveryRecord struct {
-	State         string    `json:"state"`
-	SizeBytes     int64     `json:"size_bytes"`
-	ContentDigest string    `json:"content_digest,omitempty"`
-	Location      string    `json:"location,omitempty"`
-	VerifiedAt    time.Time `json:"verified_at,omitempty"`
-	Error         string    `json:"error,omitempty"`
+	State              string    `json:"state"`
+	SizeBytes          int64     `json:"size_bytes"`
+	ContentDigest      string    `json:"content_digest,omitempty"`
+	VerificationDigest string    `json:"verification_digest,omitempty"`
+	Location           string    `json:"location,omitempty"`
+	VerifiedAt         time.Time `json:"verified_at,omitempty"`
+	Error              string    `json:"error,omitempty"`
 }
 
 func EmptyState() State {
@@ -89,6 +90,9 @@ func (s *Store) load() (State, error) {
 	if state.Version == 1 {
 		state = migrateVersion1(state)
 	}
+	if state.Version == 2 {
+		state = migrateVersion2(state)
+	}
 	if state.Version != CurrentVersion {
 		return State{}, fmt.Errorf("unsupported ingest journal version %d", state.Version)
 	}
@@ -107,6 +111,25 @@ func migrateVersion1(state State) State {
 			for name, delivery := range itemRecord.Deliveries {
 				if delivery.State == "verified" && delivery.Location == "" {
 					delivery.Location = itemPath
+					itemRecord.Deliveries[name] = delivery
+				}
+			}
+			sourceRecord.Items[itemPath] = itemRecord
+		}
+		state.Sources[sourceID] = sourceRecord
+	}
+	state.Version = 2
+	return state
+}
+
+// Version 2 destinations verified against the same SHA-256 digest used for
+// Source identity. Preserve that independent verification evidence explicitly.
+func migrateVersion2(state State) State {
+	for sourceID, sourceRecord := range state.Sources {
+		for itemPath, itemRecord := range sourceRecord.Items {
+			for name, delivery := range itemRecord.Deliveries {
+				if delivery.State == "verified" && delivery.VerificationDigest == "" {
+					delivery.VerificationDigest = delivery.ContentDigest
 					itemRecord.Deliveries[name] = delivery
 				}
 			}

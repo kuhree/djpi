@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -95,7 +96,7 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 			itemRecord = record.Items[item.Path]
 			previous, hadPrevious := itemRecord.Deliveries[target.Name()]
 			if hadPrevious && previous.State == "verified" && previous.ContentDigest == itemRecord.ContentDigest {
-				verified, verifyErr := target.Verify(ctx, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest, Location: previous.Location})
+				verified, verifyErr := target.Verify(ctx, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest, VerificationDigest: previous.VerificationDigest, Location: previous.Location})
 				if verifyErr == nil && verified {
 					result.Skipped++
 					continue
@@ -114,6 +115,13 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 				}
 				continue
 			}
+			if evidenceErr := validateEvidence(item, evidence); evidenceErr != nil {
+				result.addFailure(item.Path, target.Name(), evidenceErr)
+				if err := e.recordFailure(result.SourceID, item.Path, target.Name(), evidenceErr); err != nil {
+					return result, err
+				}
+				continue
+			}
 			if itemRecord.ContentDigest != "" && itemRecord.ContentDigest != evidence.ContentDigest {
 				collision := errors.New("destination evidence differs from prior source content identity")
 				result.addFailure(item.Path, target.Name(), collision)
@@ -124,7 +132,7 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 				return result, err
 			}
 			itemRecord.ContentDigest = evidence.ContentDigest
-			itemRecord.Deliveries[target.Name()] = journal.DeliveryRecord{State: "verified", SizeBytes: evidence.SizeBytes, ContentDigest: evidence.ContentDigest, Location: evidence.Location, VerifiedAt: e.now()}
+			itemRecord.Deliveries[target.Name()] = deliveryRecord(evidence, e.now())
 			record.Items[item.Path] = itemRecord
 			result.Verified++
 		}
@@ -133,6 +141,24 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 		return result, fmt.Errorf("%d delivery operation(s) failed", result.Failed)
 	}
 	return result, nil
+}
+
+func validateEvidence(item source.ObservedItem, evidence destination.Evidence) error {
+	if evidence.SizeBytes != item.SizeBytes {
+		return errors.New("destination evidence size differs from inventoried source")
+	}
+	digest, ok := strings.CutPrefix(evidence.ContentDigest, "sha256:")
+	decoded, decodeErr := hex.DecodeString(digest)
+	if !ok || decodeErr != nil || len(decoded) != sha256.Size {
+		return errors.New("destination did not return a full SHA-256 content digest")
+	}
+	if evidence.VerificationDigest == "" {
+		return errors.New("destination did not return an independent verification digest")
+	}
+	if evidence.Location == "" {
+		return errors.New("destination did not return a durable location")
+	}
+	return nil
 }
 
 func (e Engine) initializeSource(sourceID, camera string, observation source.Observation) error {
@@ -173,11 +199,22 @@ func (e Engine) recordVerified(sourceID, itemPath, destinationName string, evide
 			return errors.New("source content digest changed during ingest")
 		}
 		item.ContentDigest = evidence.ContentDigest
-		item.Deliveries[destinationName] = journal.DeliveryRecord{State: "verified", SizeBytes: evidence.SizeBytes, ContentDigest: evidence.ContentDigest, Location: evidence.Location, VerifiedAt: e.now()}
+		item.Deliveries[destinationName] = deliveryRecord(evidence, e.now())
 		record.Items[itemPath] = item
 		state.Sources[sourceID] = record
 		return nil
 	})
+}
+
+func deliveryRecord(evidence destination.Evidence, verifiedAt time.Time) journal.DeliveryRecord {
+	return journal.DeliveryRecord{
+		State:              "verified",
+		SizeBytes:          evidence.SizeBytes,
+		ContentDigest:      evidence.ContentDigest,
+		VerificationDigest: evidence.VerificationDigest,
+		Location:           evidence.Location,
+		VerifiedAt:         verifiedAt,
+	}
 }
 
 func (e Engine) recordFailure(sourceID, itemPath, destinationName string, failure error) error {

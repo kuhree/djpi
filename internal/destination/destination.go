@@ -7,9 +7,10 @@ import (
 )
 
 type Evidence struct {
-	SizeBytes     int64
-	ContentDigest string
-	Location      string
+	SizeBytes          int64
+	ContentDigest      string
+	VerificationDigest string
+	Location           string
 }
 
 // Destination preserves source items and independently verifies committed bytes.

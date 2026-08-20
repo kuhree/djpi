@@ -85,6 +85,7 @@ func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string,
 		return Evidence{}, err
 	}
 	evidence := Evidence{SizeBytes: written, ContentDigest: fmt.Sprintf("sha256:%x", hash.Sum(nil))}
+	evidence.VerificationDigest = evidence.ContentDigest
 	evidence.Location = contentLocation(namespace, evidence.ContentDigest, item.Path)
 	destinationPath := filepath.Join(d.Root, filepath.FromSlash(evidence.Location))
 	sourceStable, err := verifyPath(ctx, sourcePath, evidence)

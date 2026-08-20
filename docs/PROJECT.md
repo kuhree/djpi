@@ -82,7 +82,8 @@ and [Pocket 3](hardware/pocket-3-usb.md).
 ### Phase 2: destinations and controlled cleanup
 
 - Add multiple required/optional destinations.
-- Add Immich delivery.
+- Add Immich delivery without allowing its catalog to be the only preserved
+  copy. (Implemented for the wired service.)
 - Implement the proven cleanup mechanism behind an explicit configuration flag.
 - Re-snapshot immediately before cleanup and refuse on any change or ambiguity.
 
@@ -105,6 +106,7 @@ and [Pocket 3](hardware/pocket-3-usb.md).
 - [DJI Osmo Pocket 3 downloads](https://www.dji.com/downloads/products/osmo-pocket-3)
 - [DJI Osmo GPS Controller Demo](https://github.com/dji-sdk/Osmo-GPS-Controller-Demo)
 - [Osmosis](https://github.com/KonradIT/osmosis)
+- [Immich OpenAPI specification](https://github.com/immich-app/immich/blob/main/open-api/immich-openapi-specs.json)
 - [node-osmo](https://github.com/datagutt/node-osmo)
 - [lib-osmo-ble](https://github.com/yigitkonur/lib-osmo-ble)
 - [djictl](https://github.com/xaionaro-go/djictl)

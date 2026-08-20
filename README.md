@@ -21,15 +21,15 @@ community control, wireless browsing and transfer, and USB/UVC capture.
 The wired, non-destructive ingest path recognizes hardware-observed Action 6
 and Pocket 3 USB mass-storage presentations, inventories an already mounted
 camera, and durably delivers every regular file to one or more local or
-S3-compatible archives. It records full SHA-256 evidence and verifies every
-destination before reporting completion. It never deletes or formats camera
-storage.
+S3-compatible archives, with optional verified Immich catalog delivery. It
+records full SHA-256 evidence and verifies every destination before reporting
+completion. It never deletes or formats camera storage.
 
 ## First vertical slice
 
 1. Detect an Action 6 or Pocket 3 connected over USB.
 2. Inventory all media without changing it.
-3. Copy to every configured local and S3-compatible destination.
+3. Copy to every configured local, S3-compatible, and Immich destination.
 4. verify the copied size and content digest.
 5. Persist the result so reconnecting is idempotent.
 6. Report whether cleanup is safe, without performing cleanup yet.

@@ -65,5 +65,38 @@ destination before the station emits `ingest_complete`. Failures remain in the
 durable journal and are retried while the same camera stays attached or after a
 reconnect.
 
+## Immich catalog
+
+Immich is configured alongside at least one local or S3-compatible archive;
+the strict configuration validator rejects Immich as the only preserved copy.
+
+```json
+{
+  "state_directory": "/var/lib/djpi",
+  "destinations": [
+    {
+      "name": "archive",
+      "type": "local",
+      "path": "/srv/djpi/archive"
+    },
+    {
+      "name": "photos",
+      "type": "immich",
+      "server_url": "https://photos.example.com/api",
+      "api_key_env": "DJPI_IMMICH_API_KEY"
+    }
+  ]
+}
+```
+
+`server_url` is the Immich API base URL, including `/api`. Create an Immich API
+key with asset upload and asset read permissions, then expose it through the
+named environment variable. djpi computes SHA-1 in addition to its canonical
+SHA-256, asks Immich's bulk-upload check whether the content already exists,
+streams new assets as multipart data, and finally reads the returned asset back
+through the API. The delivery verifies only when the live, non-trashed,
+non-offline asset reports the same base64 SHA-1. Its asset ID and checksum are
+stored in the journal; the API key is not.
+
 There is deliberately no cleanup setting. Delivery verification and camera
 cleanup authorization are separate safety mechanisms.

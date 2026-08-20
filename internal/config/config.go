@@ -28,6 +28,8 @@ type Destination struct {
 	AccessKeyEnv    string `json:"access_key_env,omitempty"`
 	SecretKeyEnv    string `json:"secret_key_env,omitempty"`
 	SessionTokenEnv string `json:"session_token_env,omitempty"`
+	ServerURL       string `json:"server_url,omitempty"`
+	APIKeyEnv       string `json:"api_key_env,omitempty"`
 }
 
 func Load(path string) (Config, error) {
@@ -58,6 +60,7 @@ func (c Config) Validate() error {
 		return errors.New("at least one destination is required")
 	}
 	seen := make(map[string]struct{}, len(c.Destinations))
+	hasArchive, hasImmich := false, false
 	for _, destination := range c.Destinations {
 		if destination.Name == "" {
 			return errors.New("destination name is required")
@@ -68,13 +71,15 @@ func (c Config) Validate() error {
 		seen[destination.Name] = struct{}{}
 		switch destination.Type {
 		case "local":
+			hasArchive = true
 			if destination.Path == "" {
 				return fmt.Errorf("local destination %q requires path", destination.Name)
 			}
-			if destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" {
-				return fmt.Errorf("local destination %q contains S3-only settings", destination.Name)
+			if destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" || destination.ServerURL != "" || destination.APIKeyEnv != "" {
+				return fmt.Errorf("local destination %q contains settings for another destination type", destination.Name)
 			}
 		case "s3":
+			hasArchive = true
 			if destination.Path != "" {
 				return fmt.Errorf("S3 destination %q cannot contain path", destination.Name)
 			}
@@ -87,9 +92,23 @@ func (c Config) Validate() error {
 			if destination.SessionTokenEnv != "" && destination.AccessKeyEnv == "" {
 				return fmt.Errorf("S3 destination %q cannot configure session_token_env without key environment names", destination.Name)
 			}
+			if destination.ServerURL != "" || destination.APIKeyEnv != "" {
+				return fmt.Errorf("S3 destination %q contains Immich-only settings", destination.Name)
+			}
+		case "immich":
+			hasImmich = true
+			if destination.Path != "" || destination.Endpoint != "" || destination.Region != "" || destination.Bucket != "" || destination.Prefix != "" || destination.UsePathStyle || destination.AccessKeyEnv != "" || destination.SecretKeyEnv != "" || destination.SessionTokenEnv != "" {
+				return fmt.Errorf("Immich destination %q contains settings for another destination type", destination.Name)
+			}
+			if destination.ServerURL == "" || destination.APIKeyEnv == "" {
+				return fmt.Errorf("Immich destination %q requires server_url and api_key_env", destination.Name)
+			}
 		default:
 			return fmt.Errorf("destination %q has unsupported type %q", destination.Name, destination.Type)
 		}
+	}
+	if hasImmich && !hasArchive {
+		return errors.New("Immich cannot be the only destination; configure a local or S3-compatible archive")
 	}
 	_, err := c.ParsedPollInterval()
 	return err

@@ -54,7 +54,23 @@ func TestStoreMigratesVersionOneLocalDeliveryLocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	delivery := state.Sources["source"].Items["DCIM/clip.MP4"].Deliveries["archive"]
-	if state.Version != CurrentVersion || delivery.Location != "DCIM/clip.MP4" {
+	if state.Version != CurrentVersion || delivery.Location != "DCIM/clip.MP4" || delivery.VerificationDigest != "sha256:test" {
+		t.Fatalf("migrated state = %#v", state)
+	}
+}
+
+func TestStoreMigratesVersionTwoVerificationDigest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.json")
+	legacy := `{"version":2,"sources":{"source":{"camera":"camera","metadata_evidence_id":"metadata","items":{"DCIM/clip.MP4":{"size_bytes":4,"content_digest":"sha256:test","deliveries":{"archive":{"state":"verified","size_bytes":4,"content_digest":"sha256:test","location":"camera/sha256/test/DCIM/clip.MP4"}}}}}}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := NewStore(path).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery := state.Sources["source"].Items["DCIM/clip.MP4"].Deliveries["archive"]
+	if state.Version != CurrentVersion || delivery.VerificationDigest != "sha256:test" {
 		t.Fatalf("migrated state = %#v", state)
 	}
 }
