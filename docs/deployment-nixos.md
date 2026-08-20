@@ -67,9 +67,10 @@ DJPI_S3_SECRET_KEY=...
 DJPI_IMMICH_API_KEY=...
 ```
 
-Provision the S3 bucket and narrowly scoped credentials separately. The Immich
-key needs asset upload and asset read permissions. Do not put secret values in
-Nix settings because they would enter the world-readable Nix store.
+Provision the S3 bucket and narrowly scoped upload, head, and object-read
+credentials separately; object read is required for byte-level verification.
+The Immich key needs asset upload and asset read permissions. Do not put secret
+values in Nix settings because they would enter the world-readable Nix store.
 
 ## Camera mounting
 

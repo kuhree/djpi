@@ -64,10 +64,12 @@ written to station events or the ingest journal. Temporary session credentials
 can additionally name `session_token_env`.
 
 Each object carries `djpi-sha256` and `djpi-size` metadata. After upload, djpi
-checks that metadata and object length using `HeadObject`; SDK upload checksums
-protect the transfer itself. Multipart uploads use 16 MiB parts, two workers,
-and abort incomplete multipart state on failure to keep Raspberry Pi memory and
-remote garbage bounded.
+checks that metadata and object length using `HeadObject`, then streams the
+stored object back through SHA-256 with `GetObject`. The read-back is deliberate:
+metadata and transport checksums alone do not independently prove that the
+remote bytes equal the inventoried source. Multipart uploads use 16 MiB parts,
+two workers, and abort incomplete multipart state on failure to keep Raspberry
+Pi memory and remote garbage bounded.
 
 Multiple destinations may be listed. Every item must verify at every listed
 destination before the station emits `ingest_complete`. Failures remain in the

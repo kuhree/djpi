@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -37,6 +38,14 @@ func (f *fakeS3Store) HeadObject(_ context.Context, input *s3.HeadObjectInput, _
 	return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(object.body))), Metadata: object.metadata}, nil
 }
 
+func (f *fakeS3Store) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	object, ok := f.objects[aws.ToString(input.Key)]
+	if !ok {
+		return nil, fakeS3NotFound{}
+	}
+	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(object.body)), ContentLength: aws.Int64(int64(len(object.body)))}, nil
+}
+
 func (f *fakeS3Store) Upload(_ context.Context, input *s3.PutObjectInput, _ ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 	body, err := io.ReadAll(input.Body)
 	if err != nil {
@@ -65,6 +74,7 @@ func TestS3ArchiveDeliversVerifiesAndReusesContentAddressedObject(t *testing.T) 
 	archive := &S3Archive{
 		options:  S3Options{DestinationName: "backup", Region: "us-east-1", Bucket: "media", Prefix: "/djpi/"},
 		head:     store,
+		get:      store,
 		uploader: store,
 	}
 	evidence, err := archive.Deliver(context.Background(), sourceRoot, "camera-one", item)
@@ -92,7 +102,7 @@ func TestS3ArchiveRefusesExistingObjectWithMismatchedEvidence(t *testing.T) {
 	sourceRoot := t.TempDir()
 	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
 	store := newFakeS3Store()
-	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, uploader: store}
+	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, get: store, uploader: store}
 	digest, err := hashStableSource(context.Background(), sourceRoot, item)
 	if err != nil {
 		t.Fatal(err)
@@ -107,9 +117,36 @@ func TestS3ArchiveRefusesExistingObjectWithMismatchedEvidence(t *testing.T) {
 	}
 }
 
+func TestS3ArchiveRejectsCorrectMetadataOnWrongRemoteBytes(t *testing.T) {
+	sourceRoot := t.TempDir()
+	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))
+	store := newFakeS3Store()
+	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, get: store, uploader: store}
+	digest, err := hashStableSource(context.Background(), sourceRoot, item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := contentLocation("camera", digest, item.Path)
+	store.objects[key] = fakeS3Object{
+		body:     []byte("wrong"),
+		metadata: map[string]string{"djpi-sha256": strings.TrimPrefix(digest, "sha256:"), "djpi-size": fmt.Sprint(item.SizeBytes)},
+	}
+	evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest, Location: key}
+	verified, err := archive.Verify(context.Background(), evidence)
+	if err != nil || verified {
+		t.Fatalf("verify = %t, %v", verified, err)
+	}
+	if _, err := archive.Deliver(context.Background(), sourceRoot, "camera", item); err == nil {
+		t.Fatal("expected byte-level existing-object conflict")
+	}
+	if store.uploads != 0 {
+		t.Fatalf("unexpected overwrite: %d uploads", store.uploads)
+	}
+}
+
 func TestS3ArchiveRejectsUnsafeSourcePathAndNamespace(t *testing.T) {
 	store := newFakeS3Store()
-	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, uploader: store}
+	archive := &S3Archive{options: S3Options{DestinationName: "backup", Region: "r", Bucket: "b"}, head: store, get: store, uploader: store}
 	if _, err := archive.Deliver(context.Background(), t.TempDir(), "camera", fixtureUnsafeItem("../escape")); err == nil {
 		t.Fatal("expected unsafe path refusal")
 	}

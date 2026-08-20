@@ -39,6 +39,10 @@ type s3HeadClient interface {
 	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
+type s3GetClient interface {
+	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
+
 type s3UploadClient interface {
 	Upload(context.Context, *s3.PutObjectInput, ...func(*manager.Uploader)) (*manager.UploadOutput, error)
 }
@@ -46,6 +50,7 @@ type s3UploadClient interface {
 type S3Archive struct {
 	options  S3Options
 	head     s3HeadClient
+	get      s3GetClient
 	uploader s3UploadClient
 }
 
@@ -76,7 +81,7 @@ func NewS3Archive(ctx context.Context, options S3Options) (*S3Archive, error) {
 		value.Concurrency = 2
 		value.LeavePartsOnError = false
 	})
-	return &S3Archive{options: options, head: client, uploader: uploader}, nil
+	return &S3Archive{options: options, head: client, get: client, uploader: uploader}, nil
 }
 
 func (d *S3Archive) Name() string { return d.options.DestinationName }
@@ -105,6 +110,13 @@ func (d *S3Archive) Deliver(ctx context.Context, sourceRoot, namespace string, i
 	if exists {
 		if !matches {
 			return Evidence{}, fmt.Errorf("S3 destination conflict at s3://%s/%s", d.options.Bucket, evidence.Location)
+		}
+		verified, err := d.verifyObjectBytes(ctx, evidence)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if !verified {
+			return Evidence{}, fmt.Errorf("S3 object bytes conflict at s3://%s/%s", d.options.Bucket, evidence.Location)
 		}
 		stable, err := hashStableSource(ctx, sourceRoot, item)
 		if err != nil {
@@ -140,19 +152,49 @@ func (d *S3Archive) Deliver(ctx context.Context, sourceRoot, namespace string, i
 	if stable != digest {
 		return Evidence{}, fmt.Errorf("source content changed while uploading %s", item.Path)
 	}
-	_, matches, err = d.headMatches(ctx, evidence)
+	verified, err := d.Verify(ctx, evidence)
 	if err != nil {
 		return Evidence{}, err
 	}
-	if !matches {
+	if !verified {
 		return Evidence{}, fmt.Errorf("S3 verification failed after upload: s3://%s/%s", d.options.Bucket, evidence.Location)
 	}
 	return evidence, nil
 }
 
 func (d *S3Archive) Verify(ctx context.Context, evidence Evidence) (bool, error) {
-	_, matches, err := d.headMatches(ctx, evidence)
-	return matches, err
+	exists, matches, err := d.headMatches(ctx, evidence)
+	if err != nil || !exists || !matches {
+		return false, err
+	}
+	return d.verifyObjectBytes(ctx, evidence)
+}
+
+func (d *S3Archive) verifyObjectBytes(ctx context.Context, evidence Evidence) (bool, error) {
+	if d.get == nil {
+		return false, errors.New("S3 destination has no object reader")
+	}
+	output, err := d.get.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(d.options.Bucket), Key: aws.String(evidence.Location)})
+	if err != nil {
+		if isS3NotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if output.Body == nil {
+		return false, errors.New("S3 GetObject returned no body")
+	}
+	hash := sha256.New()
+	read, readErr := copyContext(ctx, hash, output.Body)
+	closeErr := output.Body.Close()
+	if readErr != nil {
+		return false, readErr
+	}
+	if closeErr != nil {
+		return false, closeErr
+	}
+	remoteDigest := fmt.Sprintf("sha256:%x", hash.Sum(nil))
+	return read == evidence.SizeBytes && remoteDigest == evidence.ContentDigest, nil
 }
 
 func (d *S3Archive) headMatches(ctx context.Context, evidence Evidence) (bool, bool, error) {
