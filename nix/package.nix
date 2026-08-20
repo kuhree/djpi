@@ -24,6 +24,11 @@ buildGoModule rec {
     "-X main.version=${version}"
   ];
 
+  postInstall = ''
+    install -Dm644 ${../THIRD_PARTY_NOTICES.md} \
+      $out/share/doc/djpi/THIRD_PARTY_NOTICES.md
+  '';
+
   meta = {
     description = "Always-running, non-destructive DJI camera ingest station";
     homepage = "https://git.kuhree.com/kuhree.com/djpi";

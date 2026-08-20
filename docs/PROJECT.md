@@ -94,9 +94,14 @@ and [Pocket 3](hardware/pocket-3-usb.md).
 ### Phase 3: wireless ingest
 
 - Port the required Osmosis BLE/Wi-Fi/DUML/HTTP behavior to the Pi service.
+  The CRC-validated DUML codec and hardware-fixture-backed manifest decoder are
+  implemented offline; live BLE, Wi-Fi, UDP, and HTTP orchestration remain.
 - Preserve the same journal and cleanup invariants as wired ingest.
 - Handle the camera AP displacing normal Wi-Fi, preferably with Ethernet or a
   second Wi-Fi interface for destination connectivity.
+
+See [`docs/wireless.md`](wireless.md) for the exact implemented safety boundary
+and upstream revision.
 
 ### Phase 4: use-the-camera features
 

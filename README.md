@@ -23,7 +23,9 @@ and Pocket 3 USB mass-storage presentations, inventories an already mounted
 camera, and durably delivers every regular file to one or more local or
 S3-compatible archives, with optional verified Immich catalog delivery. It
 records full SHA-256 evidence and verifies every destination before reporting
-completion. It never deletes or formats camera storage.
+completion. An offline, fixture-backed wireless protocol foundation can decode
+captured media manifests for both cameras, but does not yet connect to a camera.
+djpi never deletes or formats camera storage.
 
 ## First vertical slice
 
@@ -92,3 +94,5 @@ delete or format the camera.
 
 For the headless Raspberry Pi service, read-only automount, secret injection,
 and operator commands, see [`docs/deployment-nixos.md`](docs/deployment-nixos.md).
+The implemented and intentionally absent wireless behavior is recorded in
+[`docs/wireless.md`](docs/wireless.md).
