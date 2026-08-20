@@ -73,6 +73,13 @@ in
       description = "Additional destination paths writable by the hardened service.";
     };
 
+    auditOnCalendar = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "weekly";
+      description = "Optional systemd calendar schedule for a read-only full destination audit.";
+    };
+
     autoMount = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -191,6 +198,61 @@ in
         ];
         RestrictRealtime = true;
         SystemCallArchitectures = "native";
+      };
+    };
+
+    systemd.services.djpi-audit = lib.mkIf (cfg.auditOnCalendar != null) {
+      description = "Audit all djpi destination evidence";
+      after = [
+        "local-fs.target"
+        "network-online.target"
+      ];
+      wants = [ "network-online.target" ];
+      environment.HOME = cfg.stateDirectory;
+      serviceConfig = {
+        Type = "oneshot";
+        User = "djpi";
+        Group = "djpi";
+        ExecStart = "${lib.getExe cfg.package} audit --config /etc/djpi/config.json";
+        EnvironmentFile = cfg.environmentFiles;
+        IOSchedulingClass = "idle";
+        Nice = 10;
+        TimeoutStartSec = "infinity";
+        UMask = "0077";
+
+        CapabilityBoundingSet = "";
+        LockPersonality = true;
+        MemoryDenyWriteExecute = true;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+        ProtectClock = true;
+        ProtectControlGroups = true;
+        ProtectHome = true;
+        ProtectHostname = true;
+        ProtectKernelLogs = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        ProtectProc = "invisible";
+        ProtectSystem = "strict";
+        ProcSubset = "pid";
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+        RestrictRealtime = true;
+        SystemCallArchitectures = "native";
+      };
+    };
+
+    systemd.timers.djpi-audit = lib.mkIf (cfg.auditOnCalendar != null) {
+      description = "Schedule djpi destination audits";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = cfg.auditOnCalendar;
+        Persistent = true;
+        RandomizedDelaySec = "15m";
+        Unit = "djpi-audit.service";
       };
     };
   };

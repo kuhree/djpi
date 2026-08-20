@@ -33,6 +33,7 @@
               self.nixosModules.default
               {
                 services.djpi.enable = true;
+                services.djpi.auditOnCalendar = "weekly";
                 system.stateVersion = "26.05";
               }
             ];
@@ -44,6 +45,9 @@
             builtins.toJSON {
               execStart = evaluated.config.systemd.services.djpi.serviceConfig.ExecStart;
               mountScript = evaluated.config.systemd.services."djpi-mount@".script;
+              auditExecStart = evaluated.config.systemd.services.djpi-audit.serviceConfig.ExecStart;
+              auditSchedule = evaluated.config.systemd.timers.djpi-audit.timerConfig.OnCalendar;
+              auditTimeout = evaluated.config.systemd.services.djpi-audit.serviceConfig.TimeoutStartSec;
               udevRules = evaluated.config.services.udev.extraRules;
             }
           );

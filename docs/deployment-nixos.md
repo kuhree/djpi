@@ -26,6 +26,7 @@ input can replace it without changing the module configuration.
 
   services.djpi = {
     enable = true;
+    auditOnCalendar = "weekly";
     environmentFiles = [ config.age.secrets.djpi-destinations.path ];
     settings = {
       poll_interval = "2s";
@@ -107,6 +108,11 @@ curl --fail http://127.0.0.1:8787/api/v1/status
 The audit is read-only but can be I/O intensive because it independently reads
 every configured copy. Run it when archive and network load are acceptable. Use
 the same service environment when S3 or Immich credentials are configured.
+Setting `auditOnCalendar` enables a hardened systemd timer with a randomized
+delay of up to 15 minutes; it is disabled by default. The audit runs at idle I/O
+priority and reduced CPU priority, while each destination operation retains its
+configured timeout. Audit failures make the oneshot `djpi-audit.service` fail
+visibly without stopping the ingest daemon.
 
 The journal and default local archive live under `/var/lib/djpi`. The service
 restarts after failures, rechecks durable destination evidence after a process
