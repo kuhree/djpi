@@ -43,6 +43,8 @@ go run ./cmd/djpi probe --json
 go run ./cmd/djpi inventory
 go run ./cmd/djpi inventory --source /path/to/existing/source
 go run ./cmd/djpi inventory --source /path/to/existing/source --json
+go run ./cmd/djpi serve
+go run ./cmd/djpi serve --once
 ```
 
 `djpi probe` performs a read-only inventory of Linux USB descriptors, block
@@ -61,3 +63,8 @@ Its metadata evidence ID can detect changes between observations, but it is not
 a content digest, Delivery verification, or permission to perform Cleanup. The
 command does not mount a Source and reports an incomplete inventory if it finds
 an unreadable or unsupported entry such as a symlink.
+
+`djpi serve` is the long-running station process. It polls the same fail-closed
+hardware boundary, emits newline-delimited JSON state events, inventories a
+Source once per attachment, and resets after removal. The current service is
+read-only: it has no Destination delivery or Cleanup implementation yet.

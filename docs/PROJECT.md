@@ -50,6 +50,11 @@ The service must fail closed on unknown or ambiguous hardware and remain
 non-destructive unless the cleanup safety gate and the independently proven
 camera-specific cleanup mechanism both permit an operation.
 
+The initial `djpi serve` loop polls the Linux evidence boundary and emits
+structured events for Source detection, completed inventory, removal, and
+blocked states. Polling is an implementation baseline; a later udev-triggered
+wake-up may reduce idle work without changing the state machine.
+
 ## Delivery phases
 
 ### Phase 0: hardware characterization
