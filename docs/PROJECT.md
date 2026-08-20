@@ -60,8 +60,9 @@ camera-specific cleanup mechanism both permit an operation.
 - Measure read behavior while the camera is charging and screen-locked.
 - Prove what cleanup operations are available over wired and wireless paths.
 
-Observed hardware notes are kept under [`docs/hardware`](hardware/), beginning
-with the [Action 6 USB mass-storage presentation](hardware/action-6-usb.md).
+Observed hardware notes are kept under [`docs/hardware`](hardware/), including
+the USB mass-storage presentations for the [Action 6](hardware/action-6-usb.md)
+and [Pocket 3](hardware/pocket-3-usb.md).
 
 ### Phase 1: wired, read-only ingest
 

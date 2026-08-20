@@ -35,6 +35,10 @@ var observedCameraIdentities = map[string]observedCameraIdentity{
 		model:    "DJI Osmo Action 6",
 		evidence: "docs/hardware/action-6-usb.md (observed USB storage mode)",
 	},
+	"2ca3:0020": {
+		model:    "DJI Osmo Pocket 3",
+		evidence: "docs/hardware/pocket-3-usb.md (observed USB storage mode)",
+	},
 }
 
 func correlateSources(usbDevices []USBDevice, blockDevices []BlockDevice, filesystems []Filesystem) []SourceCandidate {

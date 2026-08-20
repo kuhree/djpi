@@ -52,6 +52,23 @@ func TestCorrelationRequiresKnownIDMassStorageAndMatchingSerial(t *testing.T) {
 	}
 }
 
+func TestCorrelatesHardwareObservedPocket3MassStorage(t *testing.T) {
+	usb := []USBDevice{{
+		SysName: "7-1.4", VendorID: "2ca3", ProductID: "0020", Serial: "pocket-serial",
+		Interfaces: []USBInterface{
+			{Class: "e0", Subclass: "01", Protocol: "03"},
+			{Class: "0a", Subclass: "00", Protocol: "00"},
+			{Class: "08", Subclass: "06", Protocol: "50"},
+			{Class: "ff", Subclass: "43", Protocol: "01"},
+		},
+	}}
+	blocks := []BlockDevice{{Path: "/dev/sdd", Size: 127_982_895_104, Transport: "usb", Filesystem: "exfat", Serial: "pocket-serial", Mountpoints: []string{"/camera"}}}
+	candidates := correlateSources(usb, blocks, []Filesystem{{Target: "/camera", Source: "/dev/sdd", Type: "exfat", Options: "rw,noatime"}})
+	if len(candidates) != 1 || candidates[0].CameraModel != "DJI Osmo Pocket 3" || candidates[0].BlockPath != "/dev/sdd" {
+		t.Fatalf("unexpected Pocket 3 correlation: %#v", candidates)
+	}
+}
+
 func TestCorrelationInheritsParentBlockSerialAndTransport(t *testing.T) {
 	usb := []USBDevice{{VendorID: "2ca3", ProductID: "8002", Serial: "camera-serial", Interfaces: []USBInterface{{Class: "08", Subclass: "06", Protocol: "50"}}}}
 	blocks := []BlockDevice{{Path: "/dev/sdd", Serial: "camera-serial", Transport: "usb", Children: []BlockDevice{{Path: "/dev/sdd1", Size: 42, Filesystem: "exfat", Mountpoints: []string{"/camera"}}}}}
