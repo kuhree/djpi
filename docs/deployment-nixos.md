@@ -84,11 +84,14 @@ disk, so it ignores each camera's observed zero-size second LUN and unrelated
 USB drives. It mounts under `/run/djpi/media` with
 `ro,nosuid,nodev,noexec,noatime`; djpi itself runs without mount capabilities.
 
-This automount path has been evaluated as a NixOS module and its Pocket 3 udev
-properties were matched on the x86_64 host `nixtop`. The actual read-only mount
-and ingest must still be exercised on the chosen NAS host or VM before calling
-that deployment complete. Set `autoMount = false` if another trusted component
-provides mounts.
+This automount path is [hardware-verified end to end on the Station
+`srv-nas-ix`](hardware/action-6-wired-ingest.md): an Action 6 was automounted
+read-only and 293 files totaling 8.43 GB were ingested and independently
+verified. Set `autoMount = false` if another trusted component provides mounts.
+
+A camera can enumerate in a non-storage USB mode that presents no filesystem,
+in which case the rule correctly does not match and no source appears. See
+[the Action 6 USB evidence](hardware/action-6-usb.md) for an observed example.
 
 Separately, the [full Pocket 3 local ingest and idempotent second
 pass](hardware/pocket-3-wired-ingest.md) succeeded on `nixtop` through its

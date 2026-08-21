@@ -23,6 +23,22 @@ intentionally omitted from this record.
 The kernel and udev exposed both interfaces as
 `ID_USB_INTERFACES=:ffff30:080650:`.
 
+## Other observed USB modes
+
+On 2026-08-21 the same camera model repeatedly enumerated on `srv-nas-ix` as
+`2ca3:0025` instead, with product descriptor `OsmoAction6_SN:<suffix>` and
+manufacturer `DJI`. That mode presented no mass-storage interface and created
+no SCSI or block node, so no source was correlated and no mount was attempted.
+
+Selecting the camera's storage USB mode changed the product ID to `2ca3:8002`
+and produced the mass-storage presentation described above. Treat `2ca3:0025`
+as a known non-storage mode rather than a detection failure.
+
+In `2ca3:0025` mode the camera reported the placeholder USB serial
+`123456789ABCDEF`. The storage mode `2ca3:8002` reported a stable per-unit
+serial, which is the value correlation and camera identity depend on. Do not
+rely on serials observed in non-storage modes.
+
 ## Linux storage presentation
 
 The same USB serial associated the camera with two removable block nodes:

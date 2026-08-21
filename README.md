@@ -36,6 +36,12 @@ The Pocket 3 local archive path is [hardware-verified end to
 end](docs/hardware/pocket-3-wired-ingest.md): 9 files totaling 8.57 GB were
 copied and independently verified, and an unchanged second pass skipped all 9.
 
+The Action 6 S3 path is [hardware-verified end to end on a deployed
+Station](docs/hardware/action-6-wired-ingest.md): the service automounted the
+camera read-only and ingested 293 files totaling 8.43 GB, an independent audit
+re-read and re-verified all 293 objects, and a restart re-verified them from
+durable evidence without uploading anything.
+
 ## First vertical slice
 
 1. Detect an Action 6 or Pocket 3 connected over USB.
