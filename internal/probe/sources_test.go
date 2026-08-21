@@ -116,3 +116,36 @@ func TestMultipleMountpointsRemainAmbiguous(t *testing.T) {
 		t.Fatalf("expected multiple mountpoints to fail closed, got %v", err)
 	}
 }
+
+// Observed on srv-nas-ix: the hardened service's private mount namespace lists
+// the camera mount twice, under both /run and a bind of its parent directory.
+func TestRepeatedMountpointIsOneSource(t *testing.T) {
+	usb := []USBDevice{{
+		SysName: "1-9", VendorID: "2ca3", ProductID: "8002", Serial: "camera-serial",
+		Interfaces: []USBInterface{{Class: "08", Subclass: "06", Protocol: "50"}},
+	}}
+	blocks := []BlockDevice{{
+		Name: "sdi", Path: "/dev/sdi", Size: 54_028_767_232, Removable: true, Transport: "usb",
+		Filesystem: "exfat", Label: "OsmoAction", Serial: "camera-serial",
+		Mountpoints: []string{"/run/djpi/media/sdi", "/run/djpi/media/sdi"},
+	}}
+	filesystems := []Filesystem{{
+		Target: "/run/djpi/media/sdi", Source: "/dev/sdi", Type: "exfat",
+		Options: "ro,nosuid,nodev,noexec,noatime",
+	}}
+
+	candidates := correlateSources(usb, blocks, filesystems)
+	if len(candidates) != 1 {
+		t.Fatalf("expected one source candidate, got %#v", candidates)
+	}
+	got, err := SingleMountedSource(candidates)
+	if err != nil {
+		t.Fatalf("repeated mountpoint must not be ambiguous: %v", err)
+	}
+	if got.BlockPath != "/dev/sdi" || got.Mountpoint != "/run/djpi/media/sdi" {
+		t.Fatalf("unexpected candidate: %#v", got)
+	}
+	if !got.MountReadOnly {
+		t.Fatalf("expected read-only mount evidence: %#v", got)
+	}
+}

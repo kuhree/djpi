@@ -79,6 +79,7 @@ func correlateSources(usbDevices []USBDevice, blockDevices []BlockDevice, filesy
 			}
 		}
 	}
+	candidates = dedupeCandidates(candidates)
 	sort.Slice(candidates, func(i, j int) bool {
 		if candidates[i].CameraModel != candidates[j].CameraModel {
 			return candidates[i].CameraModel < candidates[j].CameraModel
@@ -89,6 +90,25 @@ func correlateSources(usbDevices []USBDevice, blockDevices []BlockDevice, filesy
 		return candidates[i].Mountpoint < candidates[j].Mountpoint
 	})
 	return candidates
+}
+
+// dedupeCandidates collapses repeated observations of one storage node at one
+// mountpoint. A hardened service runs in its own mount namespace, where mount
+// propagation lists the same camera mount under both the original path and a
+// bind of its parent directory. That is one Source, not an ambiguous pair.
+// Genuinely distinct mountpoints are preserved so ambiguity still fails closed.
+func dedupeCandidates(candidates []SourceCandidate) []SourceCandidate {
+	seen := make(map[string]struct{}, len(candidates))
+	result := make([]SourceCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		key := candidate.CameraID + "\x00" + candidate.BlockPath + "\x00" + candidate.Mountpoint
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, candidate)
+	}
+	return result
 }
 
 func cameraID(model, serial string) string {
