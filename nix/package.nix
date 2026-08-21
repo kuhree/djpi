@@ -4,7 +4,7 @@
 }:
 buildGoModule rec {
   pname = "djpi";
-  version = "0.1.0";
+  version = lib.strings.trim (builtins.readFile ../VERSION);
 
   src = lib.fileset.toSource {
     root = ../.;
