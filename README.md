@@ -67,6 +67,25 @@ go run ./cmd/djpi audit --config djpi.example.json
 go run ./cmd/djpi audit --config djpi.example.json --json
 ```
 
+Run the complete local CI gate through the pinned Nix development shell:
+
+```console
+nix develop --command ./scripts/check.sh
+```
+
+## Releases
+
+Merges to `main` are validated and released automatically from Conventional
+Commit history. Semantic release creates `vMAJOR.MINOR.PATCH` tags and Forgejo
+release notes, and commits the matching version to `VERSION` and the Nix
+package metadata. `feat` commits produce minor releases, `fix` commits produce
+patch releases, and Conventional Commit breaking changes produce major
+releases. Pull requests run the same validation without publishing.
+
+Nix consumers should use the repository as a normal flake input and let their
+`flake.lock` pin the resolved commit. They should not hard-code a `rev` query in
+the input URL, because that prevents `nix flake update` from advancing it.
+
 `djpi probe` performs a read-only inventory of Linux USB descriptors, block
 devices, mounted filesystems, and MTP-related evidence. It does not mount,
 copy, delete, or format anything. The JSON form is intended for recording one

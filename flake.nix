@@ -18,6 +18,25 @@
         default = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix { };
       });
 
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = pkgs.mkShellNoCC {
+            packages = [
+              pkgs.actionlint
+              pkgs.git
+              pkgs.go
+              pkgs.nixfmt
+              pkgs.nodejs_22
+              pkgs.shellcheck
+            ];
+          };
+        }
+      );
+
       nixosModules.default = import ./nix/module.nix;
 
       checks = forAllSystems (

@@ -1,0 +1,47 @@
+---
+name: release
+
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: djpi-release-main
+      cancel-in-progress: false
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: https://github.com/cachix/install-nix-action@v25
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            sandbox = true
+            sandbox-fallback = false
+
+      - name: validate
+        run: nix develop --command ./scripts/check.sh
+
+      - name: semantic release
+        env:
+          FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORGEJO_URL: https://git.kuhree.com
+          FORGEJO_REPOSITORY: kuhree.com/djpi
+        run: |
+          set -euo pipefail
+          git config user.name "forgejo-actions[bot]"
+          git config user.email "forgejo-actions[bot]@noreply.git.kuhree.com"
+          nixpkgs_rev="$(
+            nix eval --impure --raw --expr \
+              '(builtins.fromJSON (builtins.readFile ./flake.lock)).nodes.nixpkgs.locked.rev'
+          )"
+          nix shell "github:NixOS/nixpkgs/${nixpkgs_rev}#semantic-release" \
+            --command semantic-release
