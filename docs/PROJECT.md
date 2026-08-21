@@ -36,6 +36,9 @@ but a generic camera-plugin framework is not an MVP goal.
   idempotent object naming.
 - **Immich destination**: upload through Immich's supported API without making
   Immich's catalog state the only preserved copy.
+- **Review surface**: an Immich staging library over the local archive, plus the
+  album-per-Ingest bookkeeping djpi contributes to it, so an operator can find
+  and pull one Media Item without opening the archive by hand.
 - **Operator surface**: structured service events, human and JSON status
   commands, and an optional read-only local web UI with health checks and live
   daemon lifecycle/retry state; notifications remain later work.
@@ -126,6 +129,27 @@ and upstream revision.
   transport and every mutating control remain hardware-gated.
 - Pocket 3 gimbal and camera-control experiments.
 - UVC capture, previews, RTMP, thumbnails, and event-driven automation.
+
+### Phase 5: review and selection
+
+Depends only on Phase 1, not on wireless ingest or camera control, and may be
+delivered before either. djpi builds no browsing UI; a second Immich account
+owns a read-only external library over the local archive and provides Review.
+See [ADR-0004](adr/0004-immich-staging-library-as-review-surface.md).
+
+- Operate a local archive Destination on the NAS pool, which Review requires
+  because an Immich external library cannot index object storage.
+- Configure the staging library's exclusion patterns so camera sidecar files do
+  not reach Review.
+- Create an Immich album per Ingest so a connection's media stays identifiable
+  after delivery, which the Source-mirroring archive layout does not preserve.
+
+Selection is recorded in the staging library as favourite and archive state. It
+is a view concern and never satisfies the cleanup policy; see
+[ADR-0002](adr/0002-selection-never-authorizes-cleanup.md). The staging library
+is a view over the archive, so its scan is not a Delivery. Promotion of finished
+work into the primary Immich library stays manual until an editing workflow
+exists.
 
 ## Upstream references
 

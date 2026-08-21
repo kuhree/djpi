@@ -52,3 +52,13 @@ _Avoid_: Delete, format
 The state in which the cleanup policy is satisfied; it is not evidence that a
 particular cleanup mechanism is supported by the Camera.
 _Avoid_: Done, uploaded, safe
+
+**Selection**:
+The operator's recorded judgment of one Media Item, identified by content
+digest: selected, rejected, or unexamined.
+_Avoid_: Rating, flag, star, cull
+
+**Review**:
+The operator surface that presents already-ingested Media Items so Selections
+can be made. It is not part of the Ingest path and never holds the only copy.
+_Avoid_: Gallery, library, browser
