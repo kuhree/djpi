@@ -13,11 +13,15 @@ import (
 )
 
 type Config struct {
-	StateDirectory     string        `json:"state_directory"`
-	PollInterval       string        `json:"poll_interval,omitempty"`
-	DestinationTimeout string        `json:"destination_timeout,omitempty"`
-	StatusListen       string        `json:"status_listen,omitempty"`
-	Destinations       []Destination `json:"destinations"`
+	StateDirectory     string `json:"state_directory"`
+	PollInterval       string `json:"poll_interval,omitempty"`
+	DestinationTimeout string `json:"destination_timeout,omitempty"`
+	StatusListen       string `json:"status_listen,omitempty"`
+	// CameraAliases names the Destination namespace for a Camera identity, so
+	// an archive reads as djpi/action6/DCIM/... instead of a hashed identity.
+	// It does not affect Camera identity in the Journal.
+	CameraAliases map[string]string `json:"camera_aliases,omitempty"`
+	Destinations  []Destination     `json:"destinations"`
 }
 
 type Destination struct {

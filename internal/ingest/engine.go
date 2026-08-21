@@ -20,8 +20,12 @@ import (
 )
 
 type Engine struct {
-	Journal          *journal.Store
-	Destinations     []destination.Destination
+	Journal      *journal.Store
+	Destinations []destination.Destination
+	// CameraAliases maps a Camera identity to the operator-chosen Destination
+	// namespace for that Camera. It only names where Media Items are written;
+	// Camera identity in the Journal is unaffected.
+	CameraAliases    map[string]string
 	OperationTimeout time.Duration
 	Progress         func(Progress)
 	Now              func() time.Time
@@ -136,7 +140,7 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 
 			e.progress(result.SourceID, camera, item, itemIndex, len(observation.Items), target.Name(), "delivering")
 			operationContext, cancel := e.operationContext(ctx)
-			evidence, deliveryErr := target.Deliver(operationContext, sourceRoot, camera, item)
+			evidence, deliveryErr := target.Deliver(operationContext, sourceRoot, e.namespaceFor(camera), item)
 			cancel()
 			if deliveryErr != nil {
 				e.progress(result.SourceID, camera, item, itemIndex, len(observation.Items), target.Name(), "failed")
@@ -193,6 +197,21 @@ func (e Engine) operationContext(parent context.Context) (context.Context, conte
 		timeout = defaultOperationTimeout
 	}
 	return context.WithTimeout(parent, timeout)
+}
+
+// namespaceFor resolves the Destination namespace for a Camera. An operator
+// alias wins; otherwise a hashed Camera identity is shortened so a Destination
+// stays browsable. The full identity remains in the Journal either way, and no
+// Camera serial is exposed.
+func (e Engine) namespaceFor(camera string) string {
+	if alias := strings.TrimSpace(e.CameraAliases[camera]); alias != "" {
+		return alias
+	}
+	digest, hashed := strings.CutPrefix(camera, "camera-sha256:")
+	if hashed && len(digest) >= 8 {
+		return "camera-" + digest[:8]
+	}
+	return camera
 }
 
 func validateEvidence(item source.ObservedItem, evidence destination.Evidence) error {

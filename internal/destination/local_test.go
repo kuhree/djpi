@@ -204,3 +204,29 @@ func fixtureItem(t *testing.T, root, relative string, content []byte) source.Obs
 	}
 	return source.ObservedItem{Path: relative, SizeBytes: int64(len(content)), ModifiedUnixNanos: modified.UnixNano()}
 }
+
+func TestContentLocationMirrorsSourceAndDisambiguatesByContent(t *testing.T) {
+	const digest = "sha256:fb527e791266b2a48bd89271e283cbfb200f654490a9848768f15aeff3a814bf"
+	got := contentLocation("action6", digest, "DCIM/DJI_001/DJI_20260818190329_0020_D_006.JPG")
+	want := "action6/DCIM/DJI_001/DJI_20260818190329_0020_D_006.fb527e791266.JPG"
+	if got != want {
+		t.Fatalf("location = %q, want %q", got, want)
+	}
+
+	// A Camera reuses item paths after a format, so identical paths holding
+	// different content must never resolve to one object.
+	other := contentLocation("action6", "sha256:0123456789abcdef"+strings.Repeat("0", 48), "DCIM/DJI_001/DJI_20260818190329_0020_D_006.JPG")
+	if other == got {
+		t.Fatalf("different content collided at %q", got)
+	}
+
+	// The same content at the same path must stay idempotent.
+	if again := contentLocation("action6", digest, "DCIM/DJI_001/DJI_20260818190329_0020_D_006.JPG"); again != got {
+		t.Fatalf("not idempotent: %q vs %q", again, got)
+	}
+
+	// An item without an extension keeps the digest as its final segment.
+	if got := contentLocation("action6", digest, "MISC/IDX"); got != "action6/MISC/IDX.fb527e791266" {
+		t.Fatalf("extensionless location = %q", got)
+	}
+}

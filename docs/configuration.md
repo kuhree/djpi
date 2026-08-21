@@ -52,9 +52,34 @@ the newly observed complete snapshot; if the re-inventory fails or is incomplete
 completion remains blocked. This protects files added or changed during a long
 delivery without treating metadata identity as content or cleanup proof.
 
-The archive must not be inside the mounted camera source. Files are stored at
-`<camera-id>/sha256/<digest>/<camera-relative-path>` so two files with the same
-camera path but different contents cannot overwrite each other.
+The archive must not be inside the mounted camera source. A destination mirrors
+the camera's own layout so it can be browsed like the card:
+
+```text
+<camera-namespace>/DCIM/DJI_001/DJI_20260818190329_0020_D_006.fb527e791266.JPG
+```
+
+The 12 hex characters before the extension are the start of the item's
+SHA-256. A camera reuses names such as `DJI_0001.MP4` after a format, so two
+files with the same camera path but different contents cannot overwrite each
+other. The full digest is always kept in the journal and in destination
+metadata, and verification always compares the full digest.
+
+`<camera-namespace>` defaults to a shortened camera identity such as
+`camera-81fa9cda`. Set `camera_aliases` to name it yourself; this only affects
+where media is written, never camera identity in the journal:
+
+```json
+{
+  "camera_aliases": {
+    "camera-sha256:81fa9cdac0594f420f7b90ed004a4765e094cf45061eeca9cb9641a92db4fa0c": "action6"
+  }
+}
+```
+
+Changing the layout or an alias does not invalidate existing deliveries.
+Verification uses each delivery's recorded location, so already-verified items
+stay verified where they are; only newly delivered items use the new layout.
 
 Before staging each file, djpi reads the destination filesystem's available
 capacity and requires the file size plus headroom: the larger of 16 MiB or 1%

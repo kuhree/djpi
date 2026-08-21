@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -255,9 +256,28 @@ func safeNamespace(namespace string) (string, error) {
 	return namespace, nil
 }
 
+// locationDigestLength is how much of the SHA-256 hex is carried in the
+// object name. A DJI Camera reuses names such as DJI_0001.MP4 after a format,
+// so the name alone cannot be a key without risking a silent overwrite of
+// different content. 12 hex characters keep that collision negligible while
+// leaving the layout readable; the full digest stays in the Journal and in
+// destination metadata, and verification always uses the full digest.
+const locationDigestLength = 12
+
+// contentLocation mirrors the Source layout so a Destination can be browsed
+// like the Camera itself, and disambiguates same-named items by content.
+//
+//	<namespace>/DCIM/DJI_001/DJI_20260818190329_0020_D_006.fb527e791266.JPG
 func contentLocation(namespace, digest, itemPath string) string {
-	digestPath := strings.TrimPrefix(digest, "sha256:")
-	return filepath.ToSlash(filepath.Join(namespace, "sha256", digestPath, filepath.FromSlash(itemPath)))
+	short := strings.TrimPrefix(digest, "sha256:")
+	if len(short) > locationDigestLength {
+		short = short[:locationDigestLength]
+	}
+	itemPath = filepath.ToSlash(itemPath)
+	directory, name := path.Split(itemPath)
+	extension := path.Ext(name)
+	stem := strings.TrimSuffix(name, extension)
+	return path.Join(namespace, directory, stem+"."+short+extension)
 }
 
 func safeRelativePath(path string) (string, error) {

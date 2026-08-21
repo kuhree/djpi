@@ -81,7 +81,7 @@ func TestS3ArchiveDeliversVerifiesAndReusesContentAddressedObject(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantedKey := "djpi/camera-one/sha256/7439bb1f96adccaa2164fccdcd6750e34ac61ba27ccec9a478ffa868b9c347cb/DCIM/DJI_001/clip.MP4"
+	wantedKey := "djpi/camera-one/DCIM/DJI_001/clip.7439bb1f96ad.MP4"
 	if evidence.Location != wantedKey || evidence.ContentDigest != "sha256:7439bb1f96adccaa2164fccdcd6750e34ac61ba27ccec9a478ffa868b9c347cb" {
 		t.Fatalf("evidence = %#v", evidence)
 	}

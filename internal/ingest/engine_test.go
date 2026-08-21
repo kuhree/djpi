@@ -212,3 +212,20 @@ func ingestFixture(t *testing.T, root string, files map[string]string) source.Ob
 	}
 	return observation
 }
+
+func TestNamespaceForPrefersAliasAndShortensHashedIdentity(t *testing.T) {
+	const identity = "camera-sha256:81fa9cdac0594f420f7b90ed004a4765e094cf45061eeca9cb9641a92db4fa0c"
+	aliased := Engine{CameraAliases: map[string]string{identity: "action6"}}
+	if got := aliased.namespaceFor(identity); got != "action6" {
+		t.Fatalf("alias namespace = %q", got)
+	}
+	// Without an alias a hashed identity is shortened, never expanded to a
+	// serial and never left as 64 hex characters.
+	if got := (Engine{}).namespaceFor(identity); got != "camera-81fa9cda" {
+		t.Fatalf("default namespace = %q", got)
+	}
+	// A non-hashed identity, such as the model fallback, passes through.
+	if got := (Engine{}).namespaceFor("DJI Osmo Pocket 3"); got != "DJI Osmo Pocket 3" {
+		t.Fatalf("passthrough namespace = %q", got)
+	}
+}
