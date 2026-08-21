@@ -77,8 +77,8 @@ nix develop --command ./scripts/check.sh
 
 Merges to `main` are validated and released automatically from Conventional
 Commit history. Semantic release creates `vMAJOR.MINOR.PATCH` tags and Forgejo
-release notes, and commits the matching version to `VERSION` and the Nix
-package metadata. `feat` commits produce minor releases, `fix` commits produce
+release notes, and commits the matching version to `VERSION`; the Nix package
+reads that same file. `feat` commits produce minor releases, `fix` commits produce
 patch releases, and Conventional Commit breaking changes produce major
 releases. Pull requests run the same validation without publishing.
 
