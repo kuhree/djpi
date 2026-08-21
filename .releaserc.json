@@ -4,7 +4,7 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    "./.forgejo/semantic-release/version-file.mjs",
-    "./.forgejo/semantic-release/forgejo-publish.mjs"
+    "./.forgejo/scripts/version-file.mjs",
+    "./.forgejo/scripts/forgejo-publish.mjs"
   ]
 }
