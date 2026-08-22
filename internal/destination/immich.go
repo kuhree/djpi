@@ -53,6 +53,41 @@ func NewImmichArchive(options ImmichOptions) (*ImmichArchive, error) {
 
 func (d *ImmichArchive) Name() string { return d.name }
 
+func (d *ImmichArchive) Stage(_ context.Context, _ string, namespace string, item source.ObservedItem) (StagedDelivery, error) {
+	if _, err := safeNamespace(namespace); err != nil {
+		return nil, err
+	}
+	if _, err := safeRelativePath(item.Path); err != nil {
+		return nil, err
+	}
+	return newFileStage("djpi-immich-*", func(ctx context.Context, stagedPath, digest string) (Evidence, error) {
+		sha1Digest, err := hashFileSHA1(ctx, stagedPath, item.SizeBytes)
+		if err != nil {
+			return Evidence{}, err
+		}
+		evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: sha1Digest}
+		assetID, upload, err := d.checkUpload(ctx, namespace+":"+digest, sha1Digest)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if upload {
+			assetID, err = d.uploadPath(ctx, stagedPath, item, sha1Digest)
+			if err != nil {
+				return Evidence{}, err
+			}
+		}
+		evidence.Location = immichAssetPrefix + assetID
+		verified, err := d.Verify(ctx, evidence)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if !verified {
+			return Evidence{}, fmt.Errorf("Immich verification failed for asset %s", assetID)
+		}
+		return evidence, nil
+	})
+}
+
 func (d *ImmichArchive) Deliver(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (Evidence, error) {
 	if _, err := safeNamespace(namespace); err != nil {
 		return Evidence{}, err
@@ -187,11 +222,15 @@ func (d *ImmichArchive) checkUpload(ctx context.Context, requestID, sha1Digest s
 }
 
 func (d *ImmichArchive) upload(ctx context.Context, sourceRoot string, item source.ObservedItem, sha1Digest string) (string, error) {
+	return d.uploadPath(ctx, filepath.Join(sourceRoot, filepath.FromSlash(item.Path)), item, sha1Digest)
+}
+
+func (d *ImmichArchive) uploadPath(ctx context.Context, sourcePath string, item source.ObservedItem, sha1Digest string) (string, error) {
 	reader, writer := io.Pipe()
 	multipartWriter := multipart.NewWriter(writer)
 	writeResult := make(chan error, 1)
 	go func() {
-		err := writeImmichMultipart(ctx, multipartWriter, sourceRoot, item)
+		err := writeImmichMultipartPath(ctx, multipartWriter, sourcePath, item)
 		if closeErr := multipartWriter.Close(); err == nil {
 			err = closeErr
 		}
@@ -234,6 +273,10 @@ func (d *ImmichArchive) upload(ctx context.Context, sourceRoot string, item sour
 }
 
 func writeImmichMultipart(ctx context.Context, writer *multipart.Writer, sourceRoot string, item source.ObservedItem) error {
+	return writeImmichMultipartPath(ctx, writer, filepath.Join(sourceRoot, filepath.FromSlash(item.Path)), item)
+}
+
+func writeImmichMultipartPath(ctx context.Context, writer *multipart.Writer, sourcePath string, item source.ObservedItem) error {
 	modified := time.Unix(0, item.ModifiedUnixNanos).UTC().Format(time.RFC3339Nano)
 	for name, value := range map[string]string{"fileCreatedAt": modified, "fileModifiedAt": modified, "filename": filepath.Base(filepath.FromSlash(item.Path)), "isFavorite": "false"} {
 		if err := writer.WriteField(name, value); err != nil {
@@ -244,7 +287,7 @@ func writeImmichMultipart(ctx context.Context, writer *multipart.Writer, sourceR
 	if err != nil {
 		return err
 	}
-	file, err := os.Open(filepath.Join(sourceRoot, filepath.FromSlash(item.Path)))
+	file, err := os.Open(sourcePath)
 	if err != nil {
 		return err
 	}
@@ -257,6 +300,23 @@ func writeImmichMultipart(ctx context.Context, writer *multipart.Writer, sourceR
 		return fmt.Errorf("source size changed while uploading %s", item.Path)
 	}
 	return nil
+}
+
+func hashFileSHA1(ctx context.Context, path string, size int64) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha1.New()
+	written, err := copyContext(ctx, hash, file)
+	if err != nil {
+		return "", err
+	}
+	if written != size {
+		return "", errors.New("staged Immich delivery size differs from Source")
+	}
+	return fmt.Sprintf("sha1:%x", hash.Sum(nil)), nil
 }
 
 func (d *ImmichArchive) request(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {

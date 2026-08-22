@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -40,6 +41,100 @@ func TestEngineDeliversVerifiesJournalsAndResumes(t *testing.T) {
 	record := state.Sources[first.SourceID]
 	if len(record.Items) != 2 || record.Items["DCIM/one.JPG"].Deliveries["archive"].State != "verified" {
 		t.Fatalf("unexpected journal: %#v", state)
+	}
+}
+
+func TestEngineFanoutReadsSourceTwiceForAnyDestinationCount(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": strings.Repeat("camera", 1024)})
+	reads := 0
+	engine := Engine{
+		Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")),
+		Destinations: []destination.Destination{
+			&fanoutTestDestination{name: "archive"},
+			&fanoutTestDestination{name: "objects"},
+			&fanoutTestDestination{name: "photos"},
+		},
+		OpenSource: func(path string) (*os.File, error) {
+			reads++
+			return os.Open(path)
+		},
+	}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err != nil || result.Verified != 3 || reads != 2 {
+		t.Fatalf("result=%#v error=%v Source reads=%d, want 3 verified and 2 reads", result, err, reads)
+	}
+}
+
+func TestEngineFanoutIsolatesDestinationWriteFailure(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": strings.Repeat("camera", 1024)})
+	healthy := &fanoutTestDestination{name: "archive"}
+	failing := &fanoutTestDestination{name: "objects", failWrite: true}
+	engine := Engine{Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")), Destinations: []destination.Destination{failing, healthy}}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err == nil || result.Verified != 1 || result.Failed != 1 || healthy.commits != 1 || failing.commits != 0 {
+		t.Fatalf("result=%#v error=%v healthy commits=%d failed commits=%d", result, err, healthy.commits, failing.commits)
+	}
+}
+
+func TestEngineFanoutFailsClosedWhenSourceChangesDuringDelivery(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "camera"})
+	path := filepath.Join(sourceRoot, "DCIM", "one.JPG")
+	target := &fanoutTestDestination{name: "archive"}
+	reads := 0
+	engine := Engine{
+		Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")), Destinations: []destination.Destination{target},
+		OpenSource: func(openPath string) (*os.File, error) {
+			reads++
+			if reads == 2 {
+				if err := os.WriteFile(path, []byte("mutate"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				modified := time.Unix(1_700_000_000, 0)
+				if err := os.Chtimes(path, modified, modified); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return os.Open(openPath)
+		},
+	}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err == nil || result.Failed != 1 || target.commits != 0 || !target.aborted {
+		t.Fatalf("result=%#v error=%v commits=%d aborted=%t", result, err, target.commits, target.aborted)
+	}
+}
+
+func TestEngineFanoutFailsClosedForShortSource(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "camera"})
+	if err := os.Truncate(filepath.Join(sourceRoot, "DCIM", "one.JPG"), 3); err != nil {
+		t.Fatal(err)
+	}
+	target := &fanoutTestDestination{name: "archive"}
+	result, err := (Engine{Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")), Destinations: []destination.Destination{target}}).Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err == nil || result.Failed != 1 || target.commits != 0 || !target.aborted {
+		t.Fatalf("result=%#v error=%v commits=%d aborted=%t", result, err, target.commits, target.aborted)
+	}
+}
+
+func TestEngineFanoutResumeReadsSourceOnceAndDoesNotRestage(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "camera"})
+	target := &fanoutTestDestination{name: "archive"}
+	reads := 0
+	engine := Engine{
+		Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")), Destinations: []destination.Destination{target},
+		OpenSource: func(path string) (*os.File, error) { reads++; return os.Open(path) },
+	}
+	if _, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation); err != nil {
+		t.Fatal(err)
+	}
+	reads, target.stages = 0, 0
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err != nil || result.Skipped != 1 || reads != 1 || target.stages != 0 {
+		t.Fatalf("result=%#v error=%v Source reads=%d stages=%d", result, err, reads, target.stages)
 	}
 }
 
@@ -171,6 +266,43 @@ func TestEngineReportsObservationalItemProgress(t *testing.T) {
 }
 
 type incompleteEvidenceDestination struct{}
+
+type fanoutTestDestination struct {
+	name      string
+	failWrite bool
+	commits   int
+	stages    int
+	aborted   bool
+}
+
+func (d *fanoutTestDestination) Name() string { return d.name }
+func (d *fanoutTestDestination) Deliver(context.Context, string, string, source.ObservedItem) (destination.Evidence, error) {
+	return destination.Evidence{}, errors.New("legacy delivery must not be used")
+}
+func (d *fanoutTestDestination) Verify(context.Context, destination.Evidence) (bool, error) {
+	return true, nil
+}
+func (d *fanoutTestDestination) Stage(context.Context, string, string, source.ObservedItem) (destination.StagedDelivery, error) {
+	d.stages++
+	return &fanoutTestStage{destination: d}, nil
+}
+
+type fanoutTestStage struct {
+	destination *fanoutTestDestination
+	bytes.Buffer
+}
+
+func (s *fanoutTestStage) Write(value []byte) (int, error) {
+	if s.destination.failWrite {
+		return 0, errors.New("injected writer failure")
+	}
+	return s.Buffer.Write(value)
+}
+func (s *fanoutTestStage) Commit(_ context.Context, digest string) (destination.Evidence, error) {
+	s.destination.commits++
+	return destination.Evidence{SizeBytes: int64(s.Len()), ContentDigest: digest, VerificationDigest: digest, Location: s.destination.name + "/item"}, nil
+}
+func (s *fanoutTestStage) Abort() error { s.destination.aborted = true; return nil }
 
 func (incompleteEvidenceDestination) Name() string { return "incomplete" }
 func (incompleteEvidenceDestination) Deliver(context.Context, string, string, source.ObservedItem) (destination.Evidence, error) {

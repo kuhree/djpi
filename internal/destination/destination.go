@@ -2,6 +2,7 @@ package destination
 
 import (
 	"context"
+	"io"
 
 	"git.kuhree.com/kuhree.com/djpi/internal/source"
 )
@@ -18,4 +19,18 @@ type Destination interface {
 	Name() string
 	Deliver(context.Context, string, string, source.ObservedItem) (Evidence, error)
 	Verify(context.Context, Evidence) (bool, error)
+}
+
+// StagedDelivery receives the one shared Source stream, then independently
+// commits and verifies those bytes after their content digest is known.
+type StagedDelivery interface {
+	io.Writer
+	Commit(context.Context, string) (Evidence, error)
+	Abort() error
+}
+
+// FanoutDestination can participate in the engine's single-read fan-out.
+type FanoutDestination interface {
+	Destination
+	Stage(context.Context, string, string, source.ObservedItem) (StagedDelivery, error)
 }

@@ -22,6 +22,7 @@ import (
 type Engine struct {
 	Journal      *journal.Store
 	Destinations []destination.Destination
+	OpenSource   func(string) (*os.File, error)
 	// CameraAliases maps a Camera identity to the operator-chosen Destination
 	// namespace for that Camera. It only names where Media Items are written;
 	// Camera identity in the Journal is unaffected.
@@ -99,6 +100,20 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 	for itemIndex, item := range observation.Items {
 		if err := ctx.Err(); err != nil {
 			return result, err
+		}
+		fanout := make([]destination.FanoutDestination, len(destinations))
+		allFanout := true
+		for index, target := range destinations {
+			fanout[index], allFanout = target.(destination.FanoutDestination)
+			if !allFanout {
+				break
+			}
+		}
+		if allFanout {
+			if err := e.ingestFanoutItem(ctx, &result, &record, result.SourceID, camera, sourceRoot, item, itemIndex, len(observation.Items), fanout); err != nil {
+				return result, err
+			}
+			continue
 		}
 		itemRecord := record.Items[item.Path]
 		if itemRecord.ContentDigest != "" {
@@ -179,6 +194,225 @@ func (e Engine) Ingest(ctx context.Context, camera, sourceRoot string, observati
 		return result, fmt.Errorf("%d delivery operation(s) failed", result.Failed)
 	}
 	return result, nil
+}
+
+type activeFanout struct {
+	target destination.FanoutDestination
+	stage  destination.StagedDelivery
+	failed bool
+}
+
+func (e Engine) ingestFanoutItem(ctx context.Context, result *Result, record *journal.SourceRecord, sourceID, camera, sourceRoot string, item source.ObservedItem, itemIndex, itemTotal int, targets []destination.FanoutDestination) error {
+	itemRecord := record.Items[item.Path]
+	if itemRecord.ContentDigest != "" {
+		e.progress(sourceID, camera, item, itemIndex, itemTotal, "", "source-check")
+	}
+	pending := make([]destination.FanoutDestination, 0, len(targets))
+	verifiedTargets := make([]destination.FanoutDestination, 0, len(targets))
+	markSkipped := func() {
+		for _, target := range verifiedTargets {
+			result.Skipped++
+			e.progress(sourceID, camera, item, itemIndex, itemTotal, target.Name(), "skipped")
+		}
+	}
+	for _, target := range targets {
+		previous, hadPrevious := itemRecord.Deliveries[target.Name()]
+		if hadPrevious && previous.State == "verified" && previous.ContentDigest == itemRecord.ContentDigest {
+			e.progress(sourceID, camera, item, itemIndex, itemTotal, target.Name(), "verifying")
+			operationContext, cancel := e.operationContext(ctx)
+			verified, err := target.Verify(operationContext, destination.Evidence{SizeBytes: previous.SizeBytes, ContentDigest: previous.ContentDigest, VerificationDigest: previous.VerificationDigest, Location: previous.Location})
+			cancel()
+			if err == nil && verified {
+				verifiedTargets = append(verifiedTargets, target)
+				continue
+			}
+			if err != nil {
+				result.addFailure(item.Path, target.Name(), err)
+				e.progress(sourceID, camera, item, itemIndex, itemTotal, target.Name(), "failed")
+				continue
+			}
+		}
+		pending = append(pending, target)
+	}
+	if len(pending) == 0 {
+		if itemRecord.ContentDigest != "" {
+			digest, err := e.hashObservedItem(ctx, sourceRoot, item)
+			if err != nil || digest != itemRecord.ContentDigest {
+				if err == nil {
+					err = errors.New("content changed without metadata evidence changing")
+				}
+				result.addFailure(item.Path, "source", err)
+				e.progress(sourceID, camera, item, itemIndex, itemTotal, "", "failed")
+				return nil
+			}
+		}
+		markSkipped()
+		return nil
+	}
+
+	active := make([]*activeFanout, 0, len(pending))
+	for _, target := range pending {
+		e.progress(sourceID, camera, item, itemIndex, itemTotal, target.Name(), "delivering")
+		operationContext, cancel := e.operationContext(ctx)
+		stage, err := target.Stage(operationContext, sourceRoot, e.namespaceFor(camera), item)
+		cancel()
+		if err != nil {
+			result.addFailure(item.Path, target.Name(), err)
+			e.progress(sourceID, camera, item, itemIndex, itemTotal, target.Name(), "failed")
+			if recordErr := e.recordFailure(sourceID, item.Path, target.Name(), err); recordErr != nil {
+				return recordErr
+			}
+			continue
+		}
+		active = append(active, &activeFanout{target: target, stage: stage})
+	}
+	defer func() {
+		for _, delivery := range active {
+			_ = delivery.stage.Abort()
+		}
+	}()
+	if len(active) == 0 {
+		if len(verifiedTargets) != 0 {
+			digest, err := e.hashObservedItem(ctx, sourceRoot, item)
+			if err != nil || digest != itemRecord.ContentDigest {
+				if err == nil {
+					err = errors.New("content changed without metadata evidence changing")
+				}
+				result.addFailure(item.Path, "source", err)
+				e.progress(sourceID, camera, item, itemIndex, itemTotal, "", "failed")
+				return nil
+			}
+			markSkipped()
+		}
+		return nil
+	}
+
+	file, err := e.openSource(sourceRoot, item)
+	if err != nil {
+		return e.failActiveFanout(result, sourceID, item, itemIndex, itemTotal, camera, active, err)
+	}
+	hash := sha256.New()
+	buffer := make([]byte, 1024*1024)
+	var total int64
+	for {
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return err
+		}
+		count, readErr := file.Read(buffer)
+		if count > 0 {
+			chunk := buffer[:count]
+			_, _ = hash.Write(chunk)
+			total += int64(count)
+			type stageWriteResult struct {
+				delivery *activeFanout
+				written  int
+				err      error
+			}
+			writeResults := make(chan stageWriteResult, len(active))
+			writes := 0
+			for _, delivery := range active {
+				if delivery.failed {
+					continue
+				}
+				writes++
+				go func(delivery *activeFanout) {
+					written, writeErr := delivery.stage.Write(chunk)
+					writeResults <- stageWriteResult{delivery: delivery, written: written, err: writeErr}
+				}(delivery)
+			}
+			for range writes {
+				writeResult := <-writeResults
+				delivery, written, writeErr := writeResult.delivery, writeResult.written, writeResult.err
+				if writeErr != nil || written != len(chunk) {
+					if writeErr == nil {
+						writeErr = io.ErrShortWrite
+					}
+					delivery.failed = true
+					_ = delivery.stage.Abort()
+					result.addFailure(item.Path, delivery.target.Name(), writeErr)
+					e.progress(sourceID, camera, item, itemIndex, itemTotal, delivery.target.Name(), "failed")
+					if err := e.recordFailure(sourceID, item.Path, delivery.target.Name(), writeErr); err != nil {
+						_ = file.Close()
+						return err
+					}
+				}
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			_ = file.Close()
+			return e.failActiveFanout(result, sourceID, item, itemIndex, itemTotal, camera, active, readErr)
+		}
+	}
+	if err := file.Close(); err != nil {
+		return e.failActiveFanout(result, sourceID, item, itemIndex, itemTotal, camera, active, err)
+	}
+	if total != item.SizeBytes {
+		return e.failActiveFanout(result, sourceID, item, itemIndex, itemTotal, camera, active, fmt.Errorf("source size changed while delivering %s", item.Path))
+	}
+	digest := fmt.Sprintf("sha256:%x", hash.Sum(nil))
+	if itemRecord.ContentDigest != "" && digest != itemRecord.ContentDigest {
+		return e.failActiveFanout(result, sourceID, item, itemIndex, itemTotal, camera, active, errors.New("content changed without metadata evidence changing"))
+	}
+	stableDigest, stableErr := e.hashObservedItem(ctx, sourceRoot, item)
+	if stableErr != nil || stableDigest != digest {
+		if stableErr == nil {
+			stableErr = fmt.Errorf("source content changed while delivering %s", item.Path)
+		}
+		return e.failActiveFanout(result, sourceID, item, itemIndex, itemTotal, camera, active, stableErr)
+	}
+	markSkipped()
+
+	for _, delivery := range active {
+		if delivery.failed {
+			continue
+		}
+		operationContext, cancel := e.operationContext(ctx)
+		evidence, err := delivery.stage.Commit(operationContext, digest)
+		cancel()
+		if err == nil {
+			err = validateEvidence(item, evidence)
+		}
+		if err == nil && evidence.ContentDigest != digest {
+			err = errors.New("destination evidence differs from fanned-out content identity")
+		}
+		if err != nil {
+			result.addFailure(item.Path, delivery.target.Name(), err)
+			e.progress(sourceID, camera, item, itemIndex, itemTotal, delivery.target.Name(), "failed")
+			if recordErr := e.recordFailure(sourceID, item.Path, delivery.target.Name(), err); recordErr != nil {
+				return recordErr
+			}
+			continue
+		}
+		if err := e.recordVerified(sourceID, item.Path, delivery.target.Name(), evidence); err != nil {
+			return err
+		}
+		itemRecord.ContentDigest = evidence.ContentDigest
+		itemRecord.Deliveries[delivery.target.Name()] = deliveryRecord(evidence, e.now())
+		record.Items[item.Path] = itemRecord
+		result.Verified++
+		e.progress(sourceID, camera, item, itemIndex, itemTotal, delivery.target.Name(), "verified")
+	}
+	return nil
+}
+
+func (e Engine) failActiveFanout(result *Result, sourceID string, item source.ObservedItem, itemIndex, itemTotal int, camera string, active []*activeFanout, failure error) error {
+	for _, delivery := range active {
+		if delivery.failed {
+			continue
+		}
+		delivery.failed = true
+		_ = delivery.stage.Abort()
+		result.addFailure(item.Path, delivery.target.Name(), failure)
+		e.progress(sourceID, camera, item, itemIndex, itemTotal, delivery.target.Name(), "failed")
+		if err := e.recordFailure(sourceID, item.Path, delivery.target.Name(), failure); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e Engine) progress(sourceID, camera string, item source.ObservedItem, index, total int, destinationName, phase string) {
@@ -319,24 +553,38 @@ func sourceRecordID(camera, evidenceID string) string {
 	return fmt.Sprintf("source-sha256:%x", digest[:])
 }
 
-func hashObservedItem(ctx context.Context, root string, item source.ObservedItem) (string, error) {
+func (e Engine) openSource(root string, item source.ObservedItem) (*os.File, error) {
 	relative := filepath.Clean(filepath.FromSlash(item.Path))
 	if item.Path == "" || strings.ContainsRune(item.Path, '\x00') || filepath.IsAbs(item.Path) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("unsafe source item path %q", item.Path)
+		return nil, fmt.Errorf("unsafe source item path %q", item.Path)
 	}
 	path := filepath.Join(root, relative)
-	file, err := os.Open(path)
+	open := e.OpenSource
+	if open == nil {
+		open = os.Open
+	}
+	file, err := open(path)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() != item.SizeBytes || info.ModTime().UnixNano() != item.ModifiedUnixNanos {
+		_ = file.Close()
+		return nil, errors.New("source item changed since inventory")
+	}
+	return file, nil
+}
+
+func (e Engine) hashObservedItem(ctx context.Context, root string, item source.ObservedItem) (string, error) {
+	file, err := e.openSource(root, item)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return "", err
-	}
-	if !info.Mode().IsRegular() || info.Size() != item.SizeBytes || info.ModTime().UnixNano() != item.ModifiedUnixNanos {
-		return "", errors.New("source item changed since inventory")
-	}
 	hash := sha256.New()
 	buffer := make([]byte, 1024*1024)
 	var read int64
@@ -363,4 +611,8 @@ func hashObservedItem(ctx context.Context, root string, item source.ObservedItem
 		return "", errors.New("source size changed while hashing")
 	}
 	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), nil
+}
+
+func hashObservedItem(ctx context.Context, root string, item source.ObservedItem) (string, error) {
+	return (Engine{}).hashObservedItem(ctx, root, item)
 }

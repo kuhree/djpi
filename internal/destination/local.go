@@ -28,6 +28,113 @@ const minimumLocalHeadroom = 16 * 1024 * 1024
 
 func (d LocalArchive) Name() string { return d.DestinationName }
 
+func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (StagedDelivery, error) {
+	if d.DestinationName == "" || d.Root == "" {
+		return nil, errors.New("local destination name and root are required")
+	}
+	if _, err := safeNamespace(namespace); err != nil {
+		return nil, err
+	}
+	if err := pathguard.RefuseInside(sourceRoot, d.Root); err != nil {
+		return nil, err
+	}
+	if _, err := safeRelativePath(item.Path); err != nil {
+		return nil, err
+	}
+	stagingDirectory := filepath.Join(d.Root, ".staging")
+	if err := os.MkdirAll(stagingDirectory, 0o700); err != nil {
+		return nil, err
+	}
+	lock, err := acquireLocalArchiveLock(ctx, d.Root)
+	if err != nil {
+		return nil, err
+	}
+	release := true
+	defer func() {
+		if release {
+			releaseLocalArchiveLock(lock)
+		}
+	}()
+	if err := reclaimLocalStaging(stagingDirectory); err != nil {
+		return nil, err
+	}
+	availableBytes := d.availableBytes
+	if availableBytes == nil {
+		availableBytes = filesystemAvailableBytes
+	}
+	available, err := availableBytes(stagingDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("inspect local destination capacity: %w", err)
+	}
+	required, err := requiredLocalCapacity(item.SizeBytes)
+	if err != nil {
+		return nil, err
+	}
+	if available < required {
+		return nil, fmt.Errorf("insufficient local destination capacity for %s: %d bytes available, %d required including headroom", item.Path, available, required)
+	}
+	stage, err := newFileStageIn(stagingDirectory, ".djpi-*.tmp", func(ctx context.Context, temporaryPath, digest string) (Evidence, error) {
+		evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest}
+		evidence.Location = contentLocation(namespace, digest, item.Path)
+		destinationPath := filepath.Join(d.Root, filepath.FromSlash(evidence.Location))
+		if err := os.MkdirAll(filepath.Dir(destinationPath), 0o700); err != nil {
+			return Evidence{}, err
+		}
+		if existing, verifyErr := verifyPath(ctx, destinationPath, evidence); verifyErr != nil {
+			return Evidence{}, verifyErr
+		} else if existing {
+			return evidence, nil
+		}
+		if _, err := os.Stat(destinationPath); err == nil {
+			return Evidence{}, fmt.Errorf("destination conflict at %s", destinationPath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return Evidence{}, err
+		}
+		if err := os.Rename(temporaryPath, destinationPath); err != nil {
+			return Evidence{}, err
+		}
+		if err := syncDirectory(filepath.Dir(destinationPath)); err != nil {
+			return Evidence{}, err
+		}
+		verified, err := verifyPath(ctx, destinationPath, evidence)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if !verified {
+			return Evidence{}, fmt.Errorf("destination verification failed after commit: %s", destinationPath)
+		}
+		return evidence, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	release = false
+	return &localStagedDelivery{fileStage: stage, lock: lock}, nil
+}
+
+type localStagedDelivery struct {
+	*fileStage
+	lock     *os.File
+	released bool
+}
+
+func (s *localStagedDelivery) Commit(ctx context.Context, digest string) (Evidence, error) {
+	defer s.release()
+	return s.fileStage.Commit(ctx, digest)
+}
+
+func (s *localStagedDelivery) Abort() error {
+	defer s.release()
+	return s.fileStage.Abort()
+}
+
+func (s *localStagedDelivery) release() {
+	if !s.released {
+		releaseLocalArchiveLock(s.lock)
+		s.released = true
+	}
+}
+
 func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (Evidence, error) {
 	if d.DestinationName == "" {
 		return Evidence{}, errors.New("local destination has no name")
