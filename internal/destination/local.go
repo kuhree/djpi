@@ -57,16 +57,13 @@ func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, i
 	if availableBytes == nil {
 		availableBytes = filesystemAvailableBytes
 	}
-	available, err := availableBytes(stagingDirectory)
-	if err != nil {
-		return nil, fmt.Errorf("inspect local destination capacity: %w", err)
-	}
 	required, err := requiredLocalCapacity(item.SizeBytes)
 	if err != nil {
 		return nil, err
 	}
-	if available < required {
-		return nil, fmt.Errorf("insufficient local destination capacity for %s: %d bytes available, %d required including headroom", item.Path, available, required)
+	release, err := reserveStageCapacity(stagingDirectory, required, availableBytes)
+	if err != nil {
+		return nil, fmt.Errorf("reserve local destination capacity for %s: %w", item.Path, err)
 	}
 	stage, err := newFileStageIn(stagingDirectory, ".djpi-*.tmp", func(ctx context.Context, temporaryPath, digest string) (Evidence, error) {
 		lock, err := acquireLocalArchiveLock(ctx, d.Root)
@@ -106,8 +103,10 @@ func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, i
 		return evidence, nil
 	})
 	if err != nil {
+		release()
 		return nil, err
 	}
+	stage.releaseReservation = release
 	return stage, nil
 }
 

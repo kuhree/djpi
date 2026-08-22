@@ -34,3 +34,22 @@ func TestReclaimManagedStagesRemovesOnlyStaleDjpiFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestStageCapacityReservationsAccountForConcurrentStages(t *testing.T) {
+	directory := t.TempDir()
+	available := func(string) (uint64, error) { return 100, nil }
+	releaseFirst, err := reserveStageCapacity(directory, 60, available)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer releaseFirst()
+	if _, err := reserveStageCapacity(directory, 60, available); err == nil {
+		t.Fatal("expected combined reservation to exceed capacity")
+	}
+	releaseFirst()
+	releaseSecond, err := reserveStageCapacity(directory, 60, available)
+	if err != nil {
+		t.Fatalf("capacity was not released: %v", err)
+	}
+	releaseSecond()
+}

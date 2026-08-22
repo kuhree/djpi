@@ -7,17 +7,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 const managedStageMaxAge = 24 * time.Hour
 
+var stageReservations = struct {
+	sync.Mutex
+	bytes map[string]uint64
+}{bytes: make(map[string]uint64)}
+
 type fileStage struct {
-	file      *os.File
-	path      string
-	commit    func(context.Context, string, string) (Evidence, error)
-	closed    bool
-	committed bool
+	file               *os.File
+	path               string
+	commit             func(context.Context, string, string) (Evidence, error)
+	closed             bool
+	committed          bool
+	releaseReservation func()
 }
 
 func newFileStage(pattern string, commit func(context.Context, string, string) (Evidence, error)) (*fileStage, error) {
@@ -32,18 +39,51 @@ func newManagedFileStage(size int64, commit func(context.Context, string, string
 	if err := reclaimManagedStages(directory, time.Now()); err != nil {
 		return nil, err
 	}
-	available, err := filesystemAvailableBytes(directory)
-	if err != nil {
-		return nil, fmt.Errorf("inspect remote staging capacity: %w", err)
-	}
 	required, err := requiredLocalCapacity(size)
 	if err != nil {
 		return nil, err
 	}
-	if available < required {
-		return nil, fmt.Errorf("insufficient remote staging capacity: %d bytes available, %d required including headroom", available, required)
+	release, err := reserveStageCapacity(directory, required, filesystemAvailableBytes)
+	if err != nil {
+		return nil, fmt.Errorf("reserve remote staging capacity: %w", err)
 	}
-	return newFileStageIn(directory, ".djpi-remote-*.tmp", commit)
+	stage, err := newFileStageIn(directory, ".djpi-remote-*.tmp", commit)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	stage.releaseReservation = release
+	return stage, nil
+}
+
+func reserveStageCapacity(directory string, required uint64, availableBytes func(string) (uint64, error)) (func(), error) {
+	directory = filepath.Clean(directory)
+	stageReservations.Lock()
+	defer stageReservations.Unlock()
+	available, err := availableBytes(directory)
+	if err != nil {
+		return nil, err
+	}
+	reserved := stageReservations.bytes[directory]
+	if required > available || reserved > available-required {
+		return nil, fmt.Errorf("insufficient staging capacity: %d bytes available, %d already reserved, %d required", available, reserved, required)
+	}
+	stageReservations.bytes[directory] = reserved + required
+	released := false
+	return func() {
+		stageReservations.Lock()
+		defer stageReservations.Unlock()
+		if released {
+			return
+		}
+		released = true
+		remaining := stageReservations.bytes[directory] - required
+		if remaining == 0 {
+			delete(stageReservations.bytes, directory)
+		} else {
+			stageReservations.bytes[directory] = remaining
+		}
+	}, nil
 }
 
 func reclaimManagedStages(directory string, now time.Time) error {
@@ -109,10 +149,16 @@ func (s *fileStage) Commit(ctx context.Context, digest string) (Evidence, error)
 		s.closed = true
 	}
 	s.committed = true
+	if s.releaseReservation != nil {
+		defer s.releaseReservation()
+	}
 	return s.commit(ctx, s.path, digest)
 }
 
 func (s *fileStage) Abort() error {
+	if s.releaseReservation != nil {
+		defer s.releaseReservation()
+	}
 	var closeErr error
 	if !s.closed {
 		closeErr = s.file.Close()
