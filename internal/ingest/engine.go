@@ -317,7 +317,9 @@ func (e Engine) ingestFanoutItem(ctx context.Context, result *Result, record *jo
 				}
 				writes++
 				go func(delivery *activeFanout) {
-					written, writeErr := delivery.stage.Write(chunk)
+					operationContext, cancel := e.operationContext(ctx)
+					defer cancel()
+					written, writeErr := delivery.stage.Write(operationContext, append([]byte(nil), chunk...))
 					writeResults <- stageWriteResult{delivery: delivery, written: written, err: writeErr}
 				}(delivery)
 			}

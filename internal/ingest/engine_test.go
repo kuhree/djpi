@@ -78,6 +78,31 @@ func TestEngineFanoutIsolatesDestinationWriteFailure(t *testing.T) {
 	}
 }
 
+func TestEngineFanoutTimesOutBlockedWriterAndCommitsHealthyDestination(t *testing.T) {
+	sourceRoot := t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "camera"})
+	healthy := &fanoutTestDestination{name: "archive"}
+	blocked := &fanoutTestDestination{name: "objects", blockWrite: true}
+	engine := Engine{Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")), Destinations: []destination.Destination{blocked, healthy}, OperationTimeout: 10 * time.Millisecond}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err == nil || result.Verified != 1 || result.Failed != 1 || healthy.commits != 1 || blocked.commits != 0 {
+		t.Fatalf("result=%#v error=%v healthy commits=%d blocked commits=%d", result, err, healthy.commits, blocked.commits)
+	}
+}
+
+func TestEngineFanoutAllowsDistinctLocalDestinationsSharingRoot(t *testing.T) {
+	sourceRoot, archiveRoot := t.TempDir(), t.TempDir()
+	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "camera"})
+	engine := Engine{Journal: journal.NewStore(filepath.Join(t.TempDir(), "journal.json")), Destinations: []destination.Destination{
+		destination.LocalArchive{DestinationName: "first", Root: archiveRoot},
+		destination.LocalArchive{DestinationName: "second", Root: archiveRoot},
+	}, OperationTimeout: 100 * time.Millisecond}
+	result, err := engine.Ingest(context.Background(), "camera", sourceRoot, observation)
+	if err != nil || result.Verified != 2 {
+		t.Fatalf("result=%#v error=%v", result, err)
+	}
+}
+
 func TestEngineFanoutFailsClosedWhenSourceChangesDuringDelivery(t *testing.T) {
 	sourceRoot := t.TempDir()
 	observation := ingestFixture(t, sourceRoot, map[string]string{"DCIM/one.JPG": "camera"})
@@ -268,11 +293,12 @@ func TestEngineReportsObservationalItemProgress(t *testing.T) {
 type incompleteEvidenceDestination struct{}
 
 type fanoutTestDestination struct {
-	name      string
-	failWrite bool
-	commits   int
-	stages    int
-	aborted   bool
+	name       string
+	failWrite  bool
+	blockWrite bool
+	commits    int
+	stages     int
+	aborted    bool
 }
 
 func (d *fanoutTestDestination) Name() string { return d.name }
@@ -292,7 +318,11 @@ type fanoutTestStage struct {
 	bytes.Buffer
 }
 
-func (s *fanoutTestStage) Write(value []byte) (int, error) {
+func (s *fanoutTestStage) Write(ctx context.Context, value []byte) (int, error) {
+	if s.destination.blockWrite {
+		<-ctx.Done()
+		return 0, ctx.Err()
+	}
 	if s.destination.failWrite {
 		return 0, errors.New("injected writer failure")
 	}

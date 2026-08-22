@@ -3,8 +3,14 @@ package destination
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
+
+const managedStageMaxAge = 24 * time.Hour
 
 type fileStage struct {
 	file      *os.File
@@ -16,6 +22,54 @@ type fileStage struct {
 
 func newFileStage(pattern string, commit func(context.Context, string, string) (Evidence, error)) (*fileStage, error) {
 	return newFileStageIn("", pattern, commit)
+}
+
+func newManagedFileStage(size int64, commit func(context.Context, string, string) (Evidence, error)) (*fileStage, error) {
+	directory := filepath.Join(os.TempDir(), "djpi-staging")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return nil, err
+	}
+	if err := reclaimManagedStages(directory, time.Now()); err != nil {
+		return nil, err
+	}
+	available, err := filesystemAvailableBytes(directory)
+	if err != nil {
+		return nil, fmt.Errorf("inspect remote staging capacity: %w", err)
+	}
+	required, err := requiredLocalCapacity(size)
+	if err != nil {
+		return nil, err
+	}
+	if available < required {
+		return nil, fmt.Errorf("insufficient remote staging capacity: %d bytes available, %d required including headroom", available, required)
+	}
+	return newFileStageIn(directory, ".djpi-remote-*.tmp", commit)
+}
+
+func reclaimManagedStages(directory string, now time.Time) error {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".djpi-remote-") || !strings.HasSuffix(entry.Name(), ".tmp") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("refuse non-regular remote staging entry %s", entry.Name())
+		}
+		if now.Sub(info.ModTime()) < managedStageMaxAge {
+			continue
+		}
+		if err := os.Remove(filepath.Join(directory, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newFileStageIn(directory, pattern string, commit func(context.Context, string, string) (Evidence, error)) (*fileStage, error) {
@@ -31,9 +85,12 @@ func newFileStageIn(directory, pattern string, commit func(context.Context, stri
 	return &fileStage{file: file, path: file.Name(), commit: commit}, nil
 }
 
-func (s *fileStage) Write(value []byte) (int, error) {
+func (s *fileStage) Write(ctx context.Context, value []byte) (int, error) {
 	if s.closed {
 		return 0, errors.New("staged delivery is closed")
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 	return s.file.Write(value)
 }

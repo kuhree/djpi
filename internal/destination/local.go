@@ -49,13 +49,8 @@ func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, i
 	if err != nil {
 		return nil, err
 	}
-	release := true
-	defer func() {
-		if release {
-			releaseLocalArchiveLock(lock)
-		}
-	}()
-	if err := reclaimLocalStaging(stagingDirectory); err != nil {
+	defer releaseLocalArchiveLock(lock)
+	if err := reclaimStaleLocalStaging(stagingDirectory, time.Now()); err != nil {
 		return nil, err
 	}
 	availableBytes := d.availableBytes
@@ -74,6 +69,11 @@ func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, i
 		return nil, fmt.Errorf("insufficient local destination capacity for %s: %d bytes available, %d required including headroom", item.Path, available, required)
 	}
 	stage, err := newFileStageIn(stagingDirectory, ".djpi-*.tmp", func(ctx context.Context, temporaryPath, digest string) (Evidence, error) {
+		lock, err := acquireLocalArchiveLock(ctx, d.Root)
+		if err != nil {
+			return Evidence{}, err
+		}
+		defer releaseLocalArchiveLock(lock)
 		evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest}
 		evidence.Location = contentLocation(namespace, digest, item.Path)
 		destinationPath := filepath.Join(d.Root, filepath.FromSlash(evidence.Location))
@@ -108,31 +108,34 @@ func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, i
 	if err != nil {
 		return nil, err
 	}
-	release = false
-	return &localStagedDelivery{fileStage: stage, lock: lock}, nil
+	return stage, nil
 }
 
-type localStagedDelivery struct {
-	*fileStage
-	lock     *os.File
-	released bool
-}
-
-func (s *localStagedDelivery) Commit(ctx context.Context, digest string) (Evidence, error) {
-	defer s.release()
-	return s.fileStage.Commit(ctx, digest)
-}
-
-func (s *localStagedDelivery) Abort() error {
-	defer s.release()
-	return s.fileStage.Abort()
-}
-
-func (s *localStagedDelivery) release() {
-	if !s.released {
-		releaseLocalArchiveLock(s.lock)
-		s.released = true
+func reclaimStaleLocalStaging(directory string, now time.Time) error {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf("inspect local destination staging: %w", err)
 	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, ".djpi-") || !strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("refuse non-regular stale staging entry %s", name)
+		}
+		if now.Sub(info.ModTime()) < managedStageMaxAge {
+			continue
+		}
+		if err := os.Remove(filepath.Join(directory, name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (Evidence, error) {

@@ -99,7 +99,7 @@ func (d *S3Archive) Stage(_ context.Context, _ string, namespace string, item so
 	if _, err := safeRelativePath(item.Path); err != nil {
 		return nil, err
 	}
-	return newFileStage("djpi-s3-*", func(ctx context.Context, stagedPath, digest string) (Evidence, error) {
+	return newManagedFileStage(item.SizeBytes, func(ctx context.Context, stagedPath, digest string) (Evidence, error) {
 		evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest}
 		evidence.Location = s3ObjectKey(d.options.Prefix, contentLocation(namespace, digest, item.Path))
 		exists, matches, err := d.headMatches(ctx, evidence)

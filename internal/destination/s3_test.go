@@ -108,7 +108,7 @@ func TestS3ArchiveCommitsFannedOutBytesAndReadsThemBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stage.Abort()
-	if _, err := stage.Write(content); err != nil {
+	if _, err := stage.Write(context.Background(), content); err != nil {
 		t.Fatal(err)
 	}
 	evidence, err := stage.Commit(context.Background(), "sha256:7439bb1f96adccaa2164fccdcd6750e34ac61ba27ccec9a478ffa868b9c347cb")

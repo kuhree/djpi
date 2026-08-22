@@ -60,7 +60,7 @@ func (d *ImmichArchive) Stage(_ context.Context, _ string, namespace string, ite
 	if _, err := safeRelativePath(item.Path); err != nil {
 		return nil, err
 	}
-	return newFileStage("djpi-immich-*", func(ctx context.Context, stagedPath, digest string) (Evidence, error) {
+	return newManagedFileStage(item.SizeBytes, func(ctx context.Context, stagedPath, digest string) (Evidence, error) {
 		sha1Digest, err := hashFileSHA1(ctx, stagedPath, item.SizeBytes)
 		if err != nil {
 			return Evidence{}, err

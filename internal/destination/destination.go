@@ -2,7 +2,6 @@ package destination
 
 import (
 	"context"
-	"io"
 
 	"git.kuhree.com/kuhree.com/djpi/internal/source"
 )
@@ -24,7 +23,7 @@ type Destination interface {
 // StagedDelivery receives the one shared Source stream, then independently
 // commits and verifies those bytes after their content digest is known.
 type StagedDelivery interface {
-	io.Writer
+	Write(context.Context, []byte) (int, error)
 	Commit(context.Context, string) (Evidence, error)
 	Abort() error
 }
