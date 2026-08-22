@@ -98,6 +98,28 @@ func TestS3ArchiveDeliversVerifiesAndReusesContentAddressedObject(t *testing.T) 
 	}
 }
 
+func TestS3ArchiveCommitsFannedOutBytesAndReadsThemBack(t *testing.T) {
+	content := []byte("camera bytes")
+	item := source.ObservedItem{Path: "DCIM/clip.MP4", SizeBytes: int64(len(content))}
+	store := newFakeS3Store()
+	archive := &S3Archive{options: S3Options{DestinationName: "objects", Region: "r", Bucket: "media"}, head: store, get: store, uploader: store}
+	stage, err := archive.Stage(context.Background(), "/camera", "action6", item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stage.Abort()
+	if _, err := stage.Write(context.Background(), content); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := stage.Commit(context.Background(), "sha256:7439bb1f96adccaa2164fccdcd6750e34ac61ba27ccec9a478ffa868b9c347cb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.uploads != 1 || !bytes.Equal(store.objects[evidence.Location].body, content) {
+		t.Fatalf("uploads=%d evidence=%#v object=%#v", store.uploads, evidence, store.objects[evidence.Location])
+	}
+}
+
 func TestS3ArchiveRefusesExistingObjectWithMismatchedEvidence(t *testing.T) {
 	sourceRoot := t.TempDir()
 	item := fixtureItem(t, sourceRoot, "DCIM/photo.JPG", []byte("photo"))

@@ -28,6 +28,115 @@ const minimumLocalHeadroom = 16 * 1024 * 1024
 
 func (d LocalArchive) Name() string { return d.DestinationName }
 
+func (d LocalArchive) Stage(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (StagedDelivery, error) {
+	if d.DestinationName == "" || d.Root == "" {
+		return nil, errors.New("local destination name and root are required")
+	}
+	if _, err := safeNamespace(namespace); err != nil {
+		return nil, err
+	}
+	if err := pathguard.RefuseInside(sourceRoot, d.Root); err != nil {
+		return nil, err
+	}
+	if _, err := safeRelativePath(item.Path); err != nil {
+		return nil, err
+	}
+	stagingDirectory := filepath.Join(d.Root, ".staging")
+	if err := os.MkdirAll(stagingDirectory, 0o700); err != nil {
+		return nil, err
+	}
+	lock, err := acquireLocalArchiveLock(ctx, d.Root)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseLocalArchiveLock(lock)
+	if err := reclaimStaleLocalStaging(stagingDirectory, time.Now()); err != nil {
+		return nil, err
+	}
+	availableBytes := d.availableBytes
+	if availableBytes == nil {
+		availableBytes = filesystemAvailableBytes
+	}
+	required, err := requiredLocalCapacity(item.SizeBytes)
+	if err != nil {
+		return nil, err
+	}
+	release, err := reserveStageCapacity(stagingDirectory, required, availableBytes)
+	if err != nil {
+		return nil, fmt.Errorf("reserve local destination capacity for %s: %w", item.Path, err)
+	}
+	stage, err := newFileStageIn(stagingDirectory, ".djpi-*.tmp", func(ctx context.Context, temporaryPath, digest string) (Evidence, error) {
+		lock, err := acquireLocalArchiveLock(ctx, d.Root)
+		if err != nil {
+			return Evidence{}, err
+		}
+		defer releaseLocalArchiveLock(lock)
+		evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest}
+		evidence.Location = contentLocation(namespace, digest, item.Path)
+		destinationPath := filepath.Join(d.Root, filepath.FromSlash(evidence.Location))
+		if err := os.MkdirAll(filepath.Dir(destinationPath), 0o700); err != nil {
+			return Evidence{}, err
+		}
+		if existing, verifyErr := verifyPath(ctx, destinationPath, evidence); verifyErr != nil {
+			return Evidence{}, verifyErr
+		} else if existing {
+			return evidence, nil
+		}
+		if _, err := os.Stat(destinationPath); err == nil {
+			return Evidence{}, fmt.Errorf("destination conflict at %s", destinationPath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return Evidence{}, err
+		}
+		if err := os.Rename(temporaryPath, destinationPath); err != nil {
+			return Evidence{}, err
+		}
+		if err := syncDirectory(filepath.Dir(destinationPath)); err != nil {
+			return Evidence{}, err
+		}
+		verified, err := verifyPath(ctx, destinationPath, evidence)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if !verified {
+			return Evidence{}, fmt.Errorf("destination verification failed after commit: %s", destinationPath)
+		}
+		return evidence, nil
+	})
+	if err != nil {
+		release()
+		return nil, err
+	}
+	stage.releaseReservation = release
+	return stage, nil
+}
+
+func reclaimStaleLocalStaging(directory string, now time.Time) error {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fmt.Errorf("inspect local destination staging: %w", err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, ".djpi-") || !strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("refuse non-regular stale staging entry %s", name)
+		}
+		if now.Sub(info.ModTime()) < managedStageMaxAge {
+			continue
+		}
+		if err := os.Remove(filepath.Join(directory, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (d LocalArchive) Deliver(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (Evidence, error) {
 	if d.DestinationName == "" {
 		return Evidence{}, errors.New("local destination has no name")

@@ -89,6 +89,63 @@ func NewS3Archive(ctx context.Context, options S3Options) (*S3Archive, error) {
 
 func (d *S3Archive) Name() string { return d.options.DestinationName }
 
+func (d *S3Archive) Stage(_ context.Context, _ string, namespace string, item source.ObservedItem) (StagedDelivery, error) {
+	if err := validateS3Options(d.options); err != nil {
+		return nil, err
+	}
+	if _, err := safeNamespace(namespace); err != nil {
+		return nil, err
+	}
+	if _, err := safeRelativePath(item.Path); err != nil {
+		return nil, err
+	}
+	return newManagedFileStage(item.SizeBytes, func(ctx context.Context, stagedPath, digest string) (Evidence, error) {
+		evidence := Evidence{SizeBytes: item.SizeBytes, ContentDigest: digest, VerificationDigest: digest}
+		evidence.Location = s3ObjectKey(d.options.Prefix, contentLocation(namespace, digest, item.Path))
+		exists, matches, err := d.headMatches(ctx, evidence)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if exists {
+			if !matches {
+				return Evidence{}, fmt.Errorf("S3 destination conflict at s3://%s/%s", d.options.Bucket, evidence.Location)
+			}
+			verified, err := d.verifyObjectBytes(ctx, evidence)
+			if err != nil {
+				return Evidence{}, err
+			}
+			if !verified {
+				return Evidence{}, fmt.Errorf("S3 object bytes conflict at s3://%s/%s", d.options.Bucket, evidence.Location)
+			}
+			return evidence, nil
+		}
+		file, err := os.Open(stagedPath)
+		if err != nil {
+			return Evidence{}, err
+		}
+		_, uploadErr := d.uploader.Upload(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(d.options.Bucket), Key: aws.String(evidence.Location), Body: file,
+			ContentLength: aws.Int64(item.SizeBytes), ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+			Metadata: map[string]string{"djpi-sha256": strings.TrimPrefix(digest, "sha256:"), "djpi-size": strconv.FormatInt(item.SizeBytes, 10)},
+		})
+		closeErr := file.Close()
+		if uploadErr != nil {
+			return Evidence{}, uploadErr
+		}
+		if closeErr != nil {
+			return Evidence{}, closeErr
+		}
+		verified, err := d.Verify(ctx, evidence)
+		if err != nil {
+			return Evidence{}, err
+		}
+		if !verified {
+			return Evidence{}, fmt.Errorf("S3 verification failed after upload: s3://%s/%s", d.options.Bucket, evidence.Location)
+		}
+		return evidence, nil
+	})
+}
+
 func (d *S3Archive) Deliver(ctx context.Context, sourceRoot, namespace string, item source.ObservedItem) (Evidence, error) {
 	if err := validateS3Options(d.options); err != nil {
 		return Evidence{}, err
