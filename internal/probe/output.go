@@ -57,6 +57,16 @@ func writeTextReport(w io.Writer, report Report) error {
 		write("    evidence: %s\n", candidate.IdentityEvidence)
 	}
 
+	if len(report.CameraModes) != 0 {
+		write("\nRecognized cameras without a Source (%d)\n", len(report.CameraModes))
+		for _, observation := range report.CameraModes {
+			write("  %s usb=%s id=%s mode=%s\n", observation.CameraModel, observation.USBDevice, observation.USBID, observation.Mode)
+			write("    why: %s\n", observation.Reason)
+			write("    do:  %s\n", observation.Guidance)
+			write("    evidence: %s\n", observation.Evidence)
+		}
+	}
+
 	write("\nMTP evidence\n")
 	if len(report.MTP.PotentialInterfaces) == 0 {
 		write("  no USB imaging/PTP interfaces visible\n")

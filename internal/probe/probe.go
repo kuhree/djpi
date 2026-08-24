@@ -19,12 +19,13 @@ const usbRoot = "/sys/bus/usb/devices"
 // Report is a machine-readable snapshot of evidence visible to the local Linux host.
 // It intentionally makes no claims about camera identity from unverified USB IDs.
 type Report struct {
-	USB              []USBDevice       `json:"usb"`
-	Block            []BlockDevice     `json:"block"`
-	Filesystems      []Filesystem      `json:"filesystems"`
-	MTP              MTPEvidence       `json:"mtp"`
-	SourceCandidates []SourceCandidate `json:"source_candidates,omitempty"`
-	Warnings         []string          `json:"warnings,omitempty"`
+	USB              []USBDevice             `json:"usb"`
+	Block            []BlockDevice           `json:"block"`
+	Filesystems      []Filesystem            `json:"filesystems"`
+	MTP              MTPEvidence             `json:"mtp"`
+	SourceCandidates []SourceCandidate       `json:"source_candidates,omitempty"`
+	CameraModes      []CameraModeObservation `json:"camera_modes,omitempty"`
+	Warnings         []string                `json:"warnings,omitempty"`
 }
 
 type USBDevice struct {
@@ -133,6 +134,7 @@ func (c Collector) Collect() Report {
 
 	report.MTP = c.collectMTP(report.USB, report.Filesystems)
 	report.SourceCandidates = correlateSources(report.USB, report.Block, report.Filesystems)
+	report.CameraModes = observeCameraModes(report.USB)
 	sort.Strings(report.Warnings)
 	return report
 }

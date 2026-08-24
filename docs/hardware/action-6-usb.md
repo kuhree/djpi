@@ -34,6 +34,11 @@ Selecting the camera's storage USB mode changed the product ID to `2ca3:8002`
 and produced the mass-storage presentation described above. Treat `2ca3:0025`
 as a known non-storage mode rather than a detection failure.
 
+`djpi probe` names this case explicitly: a recognized camera USB ID that
+presents no mass-storage interface is reported under "Recognized cameras
+without a Source", with the reason and the instruction to select the camera's
+storage USB mode. It still correlates no Source and mounts nothing.
+
 In `2ca3:0025` mode the camera reported the placeholder USB serial
 `123456789ABCDEF`. The storage mode `2ca3:8002` reported a stable per-unit
 serial, which is the value correlation and camera identity depend on. Do not
@@ -93,6 +98,8 @@ does not justify deleting any of them.
 - Repeat after recording new media and after reconnecting to test identity and
   path stability.
 - Record the camera firmware version and behavior while charging or locked.
-- Characterize other Action 6 USB modes separately, including UVC.
+- Characterize other Action 6 USB modes separately, including UVC. What
+  `2ca3:0025` actually is, and whether it exposes a useful control surface, is
+  still unknown and must be answered from observation, not assumption.
 - Prove any cleanup operation independently on expendable media only after the
   repository safety gate passes.
