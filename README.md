@@ -83,10 +83,11 @@ nix develop --command ./scripts/check.sh
 
 Merges to `main` are validated and released automatically from Conventional
 Commit history. Semantic release creates `vMAJOR.MINOR.PATCH` tags and Forgejo
-release notes, and commits the matching version to `VERSION`; the Nix package
-reads that same file. `feat` commits produce minor releases, `fix` commits produce
-patch releases, and Conventional Commit breaking changes produce major
-releases. Pull requests run the same validation without publishing.
+release notes, and commits and pushes the matching version to `VERSION` on
+`main`; the Nix package reads that same file. The project is pre-1.0, so `feat`
+commits and Conventional Commit breaking changes both produce minor releases and
+`fix` commits produce patch releases; reaching 1.0.0 is a deliberate choice, not
+an automatic one. Pull requests run the same validation without publishing.
 
 Nix consumers should use the repository as a normal flake input and let their
 `flake.lock` pin the resolved commit. They should not hard-code a `rev` query in
