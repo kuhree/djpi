@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"git.kuhree.com/kuhree.com/djpi/internal/pathguard"
-	"git.kuhree.com/kuhree.com/djpi/internal/source"
+	"git.kuhree.com/kuhree/djpi/internal/pathguard"
+	"git.kuhree.com/kuhree/djpi/internal/source"
 )
 
 type LocalArchive struct {

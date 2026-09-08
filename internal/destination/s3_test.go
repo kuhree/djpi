@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 
-	"git.kuhree.com/kuhree.com/djpi/internal/source"
+	"git.kuhree.com/kuhree/djpi/internal/source"
 )
 
 type fakeS3Object struct {

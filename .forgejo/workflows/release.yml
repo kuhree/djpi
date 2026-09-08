@@ -34,7 +34,7 @@ jobs:
         env:
           FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FORGEJO_URL: https://git.kuhree.com
-          FORGEJO_REPOSITORY: kuhree.com/djpi
+          FORGEJO_REPOSITORY: kuhree/djpi
         run: |
           set -euo pipefail
           git config user.name "forgejo-actions[bot]"

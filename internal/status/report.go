@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"git.kuhree.com/kuhree.com/djpi/internal/journal"
-	"git.kuhree.com/kuhree.com/djpi/internal/probe"
+	"git.kuhree.com/kuhree/djpi/internal/journal"
+	"git.kuhree.com/kuhree/djpi/internal/probe"
 )
 
 type Report struct {

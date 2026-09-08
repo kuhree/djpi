@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
-	"git.kuhree.com/kuhree.com/djpi/internal/station"
+	"git.kuhree.com/kuhree/djpi/internal/ingest"
+	"git.kuhree.com/kuhree/djpi/internal/station"
 )
 
 // RuntimeStatus is the daemon's current in-memory lifecycle state. Durable

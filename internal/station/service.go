@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"git.kuhree.com/kuhree.com/djpi/internal/ingest"
-	"git.kuhree.com/kuhree.com/djpi/internal/probe"
-	sourceinventory "git.kuhree.com/kuhree.com/djpi/internal/source"
+	"git.kuhree.com/kuhree/djpi/internal/ingest"
+	"git.kuhree.com/kuhree/djpi/internal/probe"
+	sourceinventory "git.kuhree.com/kuhree/djpi/internal/source"
 )
 
 type Detector interface {
