@@ -10,5 +10,7 @@ for (const workflow of nixWorkflows) {
 
     assert.match(source, /runs-on:\s*host\/nix/);
     assert.doesNotMatch(source, /install-nix-action/);
+    assert.match(source, /(^|\n)concurrency:\n\s+group:\s+djpi-/m);
+    assert.doesNotMatch(source.slice(source.indexOf("jobs:")), /\n\s+concurrency:/);
   });
 }

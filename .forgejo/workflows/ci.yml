@@ -8,14 +8,15 @@ name: ci
 permissions:
   contents: read
 
+concurrency:
+  group: djpi-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     # This gate runs Nix with the host daemon's sandbox. The container pool
     # cannot create the kernel namespaces required by Nix's sandbox.
     runs-on: host/nix
-    concurrency:
-      group: djpi-ci-${{ github.ref }}
-      cancel-in-progress: true
     steps:
       - uses: https://github.com/actions/checkout@v4
       - name: validate
