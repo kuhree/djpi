@@ -27,6 +27,7 @@
           default = pkgs.mkShellNoCC {
             packages = [
               pkgs.actionlint
+              pkgs.gcc
               pkgs.git
               pkgs.go
               pkgs.nixfmt
