@@ -9,24 +9,20 @@ name: release
 permissions:
   contents: write
 
+concurrency:
+  group: djpi-release-main
+  cancel-in-progress: false
+
 jobs:
   release:
-    runs-on: ubuntu-latest
-    concurrency:
-      group: djpi-release-main
-      cancel-in-progress: false
+    # Release validation and semantic-release both need the host Nix daemon.
+    # The container pool cannot create the kernel namespaces required by Nix's
+    # sandbox, while host/nix keeps sandboxing enabled in the daemon.
+    runs-on: host/nix
     steps:
-      - uses: https://github.com/actions/checkout@v4
+      - uses: https://github.com/actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: https://github.com/cachix/install-nix-action@v25
-        with:
-          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            sandbox = true
-            sandbox-fallback = false
-
       - name: validate
         run: nix develop --command ./scripts/check.sh
 

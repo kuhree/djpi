@@ -8,21 +8,16 @@ name: ci
 permissions:
   contents: read
 
+concurrency:
+  group: djpi-ci-${{ github.event.number || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
-    runs-on: ubuntu-latest
-    concurrency:
-      group: djpi-ci-${{ github.ref }}
-      cancel-in-progress: true
+    # This gate runs Nix with the host daemon's sandbox. The container pool
+    # cannot create the kernel namespaces required by Nix's sandbox.
+    runs-on: host/nix
     steps:
-      - uses: https://github.com/actions/checkout@v4
-      - uses: https://github.com/cachix/install-nix-action@v25
-        with:
-          install_url: https://releases.nixos.org/nix/nix-2.35.1/install
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            sandbox = true
-            sandbox-fallback = false
-
+      - uses: https://github.com/actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: validate
         run: nix develop --command ./scripts/check.sh
