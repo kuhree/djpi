@@ -17,6 +17,7 @@ shellcheck scripts/*.sh
 # Forgejo requires fully qualified action URLs. actionlint otherwise validates
 # the GitHub-compatible workflow schema but does not recognize that URL form.
 actionlint \
+  -config-file .github/actionlint.yaml \
   -ignore 'specifying action ".+" in invalid format' \
   .forgejo/workflows/*.yml
 
