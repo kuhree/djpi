@@ -70,5 +70,9 @@
           );
         }
       );
+
+      hydraJobs = {
+        inherit (self) checks devShells packages;
+      };
     };
 }
