@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"git.kuhree.com/kuhree/djpi/internal/source"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/source"
 )
 
 const immichAssetPrefix = "immich-asset:"

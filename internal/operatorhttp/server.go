@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	stationstatus "git.kuhree.com/kuhree/djpi/internal/status"
+	stationstatus "git.kuhree.com/kuhree.com/platform.djpi/internal/status"
 )
 
 type ReportProvider func() (stationstatus.Report, error)

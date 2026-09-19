@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"git.kuhree.com/kuhree/djpi/internal/config"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/config"
 )
 
 func TestConfiguredDestinationsBuildsLocalAndS3(t *testing.T) {

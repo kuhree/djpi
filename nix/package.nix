@@ -31,7 +31,7 @@ buildGoModule rec {
 
   meta = {
     description = "Always-running, non-destructive DJI camera ingest station";
-    homepage = "https://git.kuhree.com/kuhree/djpi";
+    homepage = "https://git.kuhree.com/kuhree.com/platform.djpi";
     license = lib.licenses.mit;
     mainProgram = "djpi";
     platforms = [ "x86_64-linux" ];

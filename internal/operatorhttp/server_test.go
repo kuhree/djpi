@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.kuhree.com/kuhree/djpi/internal/status"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/status"
 )
 
 func TestReadOnlyOperatorEndpoints(t *testing.T) {
