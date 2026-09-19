@@ -3,7 +3,7 @@ package destination
 import (
 	"context"
 
-	"git.kuhree.com/kuhree/djpi/internal/source"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/source"
 )
 
 type Evidence struct {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"git.kuhree.com/kuhree/djpi/internal/ingest"
-	"git.kuhree.com/kuhree/djpi/internal/station"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/ingest"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/station"
 )
 
 func TestRuntimeTrackerMapsLifecycleAndCopiesRetryDeadline(t *testing.T) {

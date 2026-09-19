@@ -1,4 +1,4 @@
-module git.kuhree.com/kuhree/djpi
+module git.kuhree.com/kuhree.com/platform.djpi
 
 go 1.26
 

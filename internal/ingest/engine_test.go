@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"git.kuhree.com/kuhree/djpi/internal/destination"
-	"git.kuhree.com/kuhree/djpi/internal/journal"
-	"git.kuhree.com/kuhree/djpi/internal/source"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/destination"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/journal"
+	"git.kuhree.com/kuhree.com/platform.djpi/internal/source"
 )
 
 func TestEngineDeliversVerifiesJournalsAndResumes(t *testing.T) {
