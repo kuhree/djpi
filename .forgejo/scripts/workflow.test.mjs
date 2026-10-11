@@ -11,7 +11,7 @@ for (const workflow of nixWorkflows) {
   test(`${workflow} uses the sandboxed Nix runner`, async () => {
     const source = await readFile(new URL(`../workflows/${workflow}`, import.meta.url), "utf8");
 
-    assert.match(source, /runs-on:\s*host\/nix/);
+    assert.match(source, /runs-on:\s*nix\s*$/m);
     assert.doesNotMatch(source, /install-nix-action/);
     if (workflow === "ci.yml") {
       assert.match(

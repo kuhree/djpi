@@ -16,7 +16,7 @@ jobs:
   ci:
     # This gate runs Nix with the host daemon's sandbox. The container pool
     # cannot create the kernel namespaces required by Nix's sandbox.
-    runs-on: host/nix
+    runs-on: nix
     steps:
       - uses: https://github.com/actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: validate

@@ -17,8 +17,8 @@ jobs:
   release:
     # Release validation and semantic-release both need the host Nix daemon.
     # The container pool cannot create the kernel namespaces required by Nix's
-    # sandbox, while host/nix keeps sandboxing enabled in the daemon.
-    runs-on: host/nix
+    # sandbox, while the `nix` runner keeps sandboxing enabled in the daemon.
+    runs-on: nix
     steps:
       - uses: https://github.com/actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
