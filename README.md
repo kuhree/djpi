@@ -25,6 +25,6 @@ nix develop --command ./scripts/check.sh             # tests + lint
 ```
 
 More: [usage](docs/usage.md) · [config](docs/configuration.md) ·
-[NixOS](docs/deployment-nixos.md) · [roadmap](docs/PROJECT.md)
+[NixOS](docs/deployment-nixos.md) · [how it works](docs/ingest.md) · [review](docs/review.md)
 
 Pre-1.0. Wired ingest works; wireless and Bluetooth control are in progress.
